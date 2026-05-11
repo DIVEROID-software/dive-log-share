@@ -4,8 +4,8 @@ import './App.css'
 const STORAGE_BASE_URL =
   'https://supabase.diveroid.shop/storage/v1/object/public/dive_log_share'
 const DOWNLOAD_URL = 'https://www.diveroid.com/'
-const DIVEROID_LOGO_URL = '/diveroid_logo.svg'
-const DIVEROID_FULL_LOGO_URL = '/diveroid_full_logo.svg'
+const DIVEROID_LOGO_URL = `${import.meta.env.BASE_URL}diveroid_logo.svg`
+const DIVEROID_FULL_LOGO_URL = `${import.meta.env.BASE_URL}diveroid_full_logo.svg`
 
 interface DiveLogShareManifest {
   schemaVersion: number
