@@ -70,6 +70,7 @@ type LoadState =
 interface RouteState {
   shareId: string
   selectedLogId: string | null
+  shareType: string | null
 }
 
 interface ChartPoint {
@@ -139,12 +140,12 @@ function App() {
   }, [loadState, route.shareId, route.selectedLogId])
 
   const openDiveLog = (diveLogId: string) => {
-    navigateTo({ shareId: route.shareId, selectedLogId: diveLogId })
+    navigateTo({ shareId: route.shareId, selectedLogId: diveLogId, shareType: route.shareType })
     setRoute(readRouteState())
   }
 
   const closeDiveLog = () => {
-    navigateTo({ shareId: route.shareId, selectedLogId: null })
+    navigateTo({ shareId: route.shareId, selectedLogId: null, shareType: route.shareType })
     setRoute(readRouteState())
   }
 
@@ -164,7 +165,11 @@ function App() {
           loadState.status === 'success' &&
           loadState.shareId === route.shareId &&
           (selectedDiveLog ? (
-            <DiveLogDetailScreen diveLog={selectedDiveLog} onBack={closeDiveLog} />
+            <DiveLogDetailScreen
+              diveLog={selectedDiveLog}
+              showBackButton={route.shareType !== 'single'}
+              onBack={closeDiveLog}
+            />
           ) : (
             <DiveLogListScreen
               manifest={loadState.manifest}
@@ -224,17 +229,21 @@ function DiveLogListScreen({
 
 function DiveLogDetailScreen({
   diveLog,
+  showBackButton,
   onBack,
 }: {
   diveLog: DiveLogShareManifestDiveLog
+  showBackButton: boolean
   onBack: () => void
 }) {
   return (
     <article className="screen detail-screen">
       <header className="detail-app-bar">
-        <button type="button" className="icon-button" onClick={onBack} aria-label="Back to list">
-          <BackIcon />
-        </button>
+        {showBackButton && (
+          <button type="button" className="icon-button" onClick={onBack} aria-label="Back to list">
+            <BackIcon />
+          </button>
+        )}
       </header>
 
       <section className="detail-intro">
@@ -534,9 +543,11 @@ function GasIcon() {
 
 function readRouteState(): RouteState {
   const params = new URLSearchParams(window.location.search)
+  const shareType = params.get('type')?.trim().toLowerCase() || null
   return {
     shareId: params.get('id')?.trim() ?? '',
     selectedLogId: params.get('log')?.trim() || null,
+    shareType,
   }
 }
 
@@ -547,6 +558,11 @@ function navigateTo(route: RouteState) {
     params.set('log', route.selectedLogId)
   } else {
     params.delete('log')
+  }
+  if (route.shareType) {
+    params.set('type', route.shareType)
+  } else {
+    params.delete('type')
   }
   window.history.pushState(null, '', `${window.location.pathname}?${params.toString()}`)
 }
