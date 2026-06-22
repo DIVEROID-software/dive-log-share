@@ -72,3 +72,61 @@ export default defineConfig([
 ])
 ```
 # dive-log-share
+
+## Triển khai bằng Docker
+
+Ngoài GitHub Pages, project có thể chạy trên server dev/prod bằng Docker.
+
+### Production (Nginx serve build tĩnh)
+
+```bash
+# Build image và chạy nền
+docker compose up -d --build
+
+# App chạy tại http://localhost:8080 (đổi cổng bằng biến WEB_PORT)
+WEB_PORT=80 docker compose up -d --build
+```
+
+Hoặc dùng trực tiếp Docker không qua compose:
+
+```bash
+docker build -t dive-log-share .
+docker run -d -p 8080:80 --name dive-log-share dive-log-share
+```
+
+> Image dùng multi-stage: build bằng Node 24 rồi serve bằng Nginx, đã cấu hình
+> sẵn SPA history fallback và cache cho asset. Mặc định `base` là `/` (root
+> domain). Nếu deploy dưới sub-path, đổi `VITE_BASE_PATH` trong
+> `docker-compose.yml` (build arg) hoặc khi `docker build --build-arg`.
+
+#### Cấu hình API base URL
+
+App đọc API base URL từ biến `VITE_API_BASE_URL` (mặc định
+`https://diveroid30api.diveroid.com`). Vì là biến `VITE_*`, giá trị được
+**nhúng lúc build**, nên cần truyền lúc build image:
+
+```bash
+# Qua docker compose (đọc từ .env hoặc shell)
+VITE_API_BASE_URL=https://api.dev.example.com docker compose up -d --build
+
+# Hoặc trực tiếp
+docker build --build-arg VITE_API_BASE_URL=https://api.dev.example.com -t dive-log-share .
+```
+
+Khi chạy `npm run dev`/`npm run build` ngoài Docker, tạo file `.env` từ
+`.env.example` và đặt `VITE_API_BASE_URL` tương ứng.
+
+### Development (Vite dev server + hot reload)
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+
+# App chạy tại http://localhost:5173 (đổi cổng bằng biến DEV_PORT)
+```
+
+Source được mount vào container nên chỉnh code sẽ reload ngay.
+
+### GitHub Pages
+
+Workflow `.github/workflows/deploy-pages.yml` vẫn hoạt động như cũ: khi không
+set `VITE_BASE_PATH`, `base` mặc định là `/dive-log-share/`.

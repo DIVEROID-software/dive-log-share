@@ -1,0 +1,18 @@
+# Production: build image tĩnh và serve bằng Nginx.
+# Dùng: docker compose up -d --build
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Base path khi serve ở root domain. Đổi nếu deploy dưới sub-path.
+        VITE_BASE_PATH: /
+        # Base URL của API — nhúng lúc build. Lấy từ .env hoặc đặt mặc định.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://diveroid30api.diveroid.com}
+    image: dive-log-share:latest
+    container_name: dive-log-share
+    restart: unless-stopped
+    ports:
+      # Host:Container — đổi cổng host nếu cần (vd 8080:80)
+      - "${WEB_PORT:-8081}:80"
