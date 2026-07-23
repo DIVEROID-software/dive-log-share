@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import './App.css'
 
 const API_BASE_URL = (
@@ -62,6 +70,13 @@ interface DiveLogShareManifestMedia {
   mediaKind: string
   filePath: string
   posterPath: string | null
+  /** Seconds from dive start; null when capture metadata was unavailable. */
+  captureOffsetSeconds: number | null
+}
+
+interface MediaMarker {
+  mediaIndex: number
+  offsetSeconds: number
 }
 
 type LoadState =
@@ -168,6 +183,7 @@ function App() {
           loadState.shareId === route.shareId &&
           (selectedDiveLog ? (
             <DiveLogDetailScreen
+              key={selectedDiveLog.diveLogId}
               diveLog={selectedDiveLog}
               showBackButton={route.shareType !== 'single'}
               onBack={closeDiveLog}
@@ -238,6 +254,68 @@ function DiveLogDetailScreen({
   showBackButton: boolean
   onBack: () => void
 }) {
+  const points = useMemo(() => chartPoints(diveLog.chart), [diveLog.chart])
+  const mediaMarkers = useMemo(
+    () => buildMediaMarkers(diveLog.media, points),
+    [diveLog.media, points],
+  )
+  const [selectedPointIndex, setSelectedPointIndex] = useState(0)
+  const [activeMediaIndex, setActiveMediaIndex] = useState(-1)
+  const chartScrollLockRef = useRef(0)
+  const isTouchingChartRef = useRef(false)
+  const mediaItemRefs = useRef<Array<HTMLElement | null>>([])
+  const scrollUnlockTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (scrollUnlockTimerRef.current !== null) {
+        window.clearTimeout(scrollUnlockTimerRef.current)
+      }
+    }
+  }, [])
+
+  const scrollMediaIntoView = useCallback((mediaIndex: number) => {
+    const target = mediaItemRefs.current[mediaIndex]
+    if (!target) {
+      return
+    }
+    chartScrollLockRef.current += 1
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (scrollUnlockTimerRef.current !== null) {
+      window.clearTimeout(scrollUnlockTimerRef.current)
+    }
+    scrollUnlockTimerRef.current = window.setTimeout(() => {
+      chartScrollLockRef.current = Math.max(0, chartScrollLockRef.current - 1)
+      scrollUnlockTimerRef.current = null
+    }, 700)
+  }, [])
+
+  const handleChartPointSelect = useCallback(
+    (pointIndex: number, nearbyMediaIndex: number | null) => {
+      setSelectedPointIndex(pointIndex)
+      if (nearbyMediaIndex === null) {
+        return
+      }
+      setActiveMediaIndex(nearbyMediaIndex)
+      scrollMediaIntoView(nearbyMediaIndex)
+    },
+    [scrollMediaIntoView],
+  )
+
+  const handleGalleryActiveChange = useCallback(
+    (mediaIndex: number) => {
+      if (chartScrollLockRef.current > 0 || isTouchingChartRef.current) {
+        return
+      }
+      setActiveMediaIndex(mediaIndex)
+      const marker = nearestMediaMarkerByIndex(mediaMarkers, mediaIndex)
+      if (marker && points.length > 0) {
+        setSelectedPointIndex(findClosestIndex(points, marker.offsetSeconds))
+      }
+    },
+    [mediaMarkers, points],
+  )
+
   return (
     <article className="screen detail-screen">
       <header className="detail-app-bar">
@@ -258,8 +336,24 @@ function DiveLogDetailScreen({
       </section>
 
       <StatsGrid stats={diveLog.stats} isFreeDiving={diveLog.isFreeDiving} />
-      <DiveProfileChart chart={diveLog.chart} stats={diveLog.stats} />
-      <MediaGallery media={diveLog.media} />
+      <div className="sticky-chart">
+        <DiveProfileChart
+          stats={diveLog.stats}
+          points={points}
+          mediaMarkers={mediaMarkers}
+          selectedPointIndex={selectedPointIndex}
+          onSelectPoint={handleChartPointSelect}
+          onTouchingChange={(isTouching) => {
+            isTouchingChartRef.current = isTouching
+          }}
+        />
+      </div>
+      <MediaGallery
+        media={diveLog.media}
+        activeMediaIndex={activeMediaIndex}
+        itemRefs={mediaItemRefs}
+        onActiveMediaChange={handleGalleryActiveChange}
+      />
     </article>
   )
 }
@@ -330,28 +424,126 @@ function StatItem({
 }
 
 function DiveProfileChart({
-  chart,
   stats,
+  points,
+  mediaMarkers,
+  selectedPointIndex,
+  onSelectPoint,
+  onTouchingChange,
 }: {
-  chart: DiveLogShareManifestChart | null
   stats: DiveLogShareManifestStats | null
+  points: ChartPoint[]
+  mediaMarkers: MediaMarker[]
+  selectedPointIndex: number
+  onSelectPoint: (pointIndex: number, nearbyMediaIndex: number | null) => void
+  onTouchingChange: (isTouching: boolean) => void
 }) {
-  const points = chartPoints(chart)
+  const svgRef = useRef<SVGSVGElement | null>(null)
+  const lastMediaIndexRef = useRef(-1)
   const hasChart = points.length >= 2
   const maxDepth = Math.max(
     1,
     stats?.maxDepth ?? 0,
     ...points.map((point) => Math.abs(point.y)),
   )
-  const maxTime = Math.max(1, stats?.diveTime ?? 0, ...points.map((point) => point.x))
+  // Chart X and capture offsets are seconds; stats.diveTime is minutes.
+  const maxTime = Math.max(
+    1,
+    (stats?.diveTime ?? 0) * 60,
+    ...points.map((point) => point.x),
+  )
+  const minTime = points.length > 0 ? points[0].x : 0
   const yAxisLabels = axisDepthLabels(maxDepth)
   const xAxisLabels = axisTimeLabels(maxTime)
   const path = hasChart ? areaPath(points, maxTime, maxDepth) : ''
   const line = hasChart ? linePath(points, maxTime, maxDepth) : ''
+  const markerIndex = hasChart
+    ? Math.min(Math.max(selectedPointIndex, 0), points.length - 1)
+    : 0
+  const markerPoint = hasChart ? points[markerIndex] : null
+  const markerCanvas = markerPoint
+    ? {
+        x: chartX(markerPoint.x, maxTime),
+        y: chartY(markerPoint.y, maxDepth),
+      }
+    : null
+  const markerLabel = markerPoint
+    ? `↕ ${Math.round(Math.abs(markerPoint.y))}m │ ⏱ ${formatTimeLabel(markerPoint.x)}`
+    : ''
+  const labelLayout = markerCanvas
+    ? resolveMarkerLabelLayout(markerCanvas.x, markerCanvas.y, markerLabel)
+    : null
+
+  const updateFromClientX = (clientX: number) => {
+    if (!hasChart || !svgRef.current) {
+      return
+    }
+    const bounds = svgRef.current.getBoundingClientRect()
+    if (bounds.width <= 0) {
+      return
+    }
+    const viewX = ((clientX - bounds.left) / bounds.width) * CHART_VIEW_WIDTH
+    const clampedFraction = Math.min(
+      1,
+      Math.max(0, (viewX - CHART_PLOT_LEFT) / CHART_PLOT_WIDTH),
+    )
+    const dataX = minTime + clampedFraction * (maxTime - minTime)
+    const pointIndex = findClosestIndex(points, dataX)
+    const currentX = points[pointIndex].x
+    const threshold = (maxTime - minTime) / 50
+    let nearbyMediaIndex: number | null = null
+    let nearestDistance = Number.POSITIVE_INFINITY
+    for (const marker of mediaMarkers) {
+      const distance = Math.abs(marker.offsetSeconds - currentX)
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nearbyMediaIndex = distance <= threshold ? marker.mediaIndex : null
+      }
+    }
+    if (nearbyMediaIndex === null) {
+      lastMediaIndexRef.current = -1
+      onSelectPoint(pointIndex, null)
+      return
+    }
+    if (lastMediaIndexRef.current === nearbyMediaIndex) {
+      onSelectPoint(pointIndex, null)
+      return
+    }
+    lastMediaIndexRef.current = nearbyMediaIndex
+    onSelectPoint(pointIndex, nearbyMediaIndex)
+  }
+
+  const handlePointerDown = (event: ReactPointerEvent<SVGRectElement>) => {
+    if (!hasChart) {
+      return
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    onTouchingChange(true)
+    updateFromClientX(event.clientX)
+  }
+
+  const handlePointerMove = (event: ReactPointerEvent<SVGRectElement>) => {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+      return
+    }
+    updateFromClientX(event.clientX)
+  }
+
+  const handlePointerUp = (event: ReactPointerEvent<SVGRectElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    onTouchingChange(false)
+  }
 
   return (
     <section className="profile-card" aria-label="Dive profile chart">
-      <svg viewBox="0 0 350 156" role="img" aria-label="Dive profile">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${CHART_VIEW_WIDTH} ${CHART_VIEW_HEIGHT}`}
+        role="img"
+        aria-label="Dive profile. Drag to scrub through media."
+      >
         <defs>
           <linearGradient id="profile-fill" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="#BCE7FF" />
@@ -363,10 +555,10 @@ function DiveProfileChart({
           <line
             key={lineIndex}
             className="chart-grid-line"
-            x1="28"
-            x2="344"
-            y1={18 + lineIndex * 30}
-            y2={18 + lineIndex * 30}
+            x1={CHART_PLOT_LEFT}
+            x2={CHART_PLOT_LEFT + CHART_PLOT_WIDTH}
+            y1={CHART_PLOT_TOP + lineIndex * 30}
+            y2={CHART_PLOT_TOP + lineIndex * 30}
           />
         ))}
         {hasChart && (
@@ -374,6 +566,62 @@ function DiveProfileChart({
             <path className="profile-fill" d={path} />
             <path className="profile-line" d={line} />
           </>
+        )}
+        {markerCanvas && (
+          <g className="chart-marker" aria-hidden="true">
+            <line
+              className="chart-marker-guide"
+              x1={markerCanvas.x}
+              x2={markerCanvas.x}
+              y1={markerCanvas.y}
+              y2={CHART_PLOT_TOP + CHART_PLOT_HEIGHT}
+            />
+            <circle
+              className="chart-marker-outer"
+              cx={markerCanvas.x}
+              cy={markerCanvas.y}
+              r="8"
+            />
+            <circle
+              className="chart-marker-inner"
+              cx={markerCanvas.x}
+              cy={markerCanvas.y}
+              r="5"
+            />
+            {labelLayout && (
+              <>
+                <rect
+                  className="chart-marker-label-bg"
+                  x={labelLayout.x}
+                  y={labelLayout.y}
+                  width={labelLayout.width}
+                  height={labelLayout.height}
+                  rx={labelLayout.height / 2}
+                />
+                <text
+                  className="chart-marker-label"
+                  x={labelLayout.x + 12}
+                  y={labelLayout.y + labelLayout.height / 2 + 4}
+                >
+                  {markerLabel}
+                </text>
+              </>
+            )}
+          </g>
+        )}
+        {hasChart && (
+          <rect
+            className="chart-hit-area"
+            x={CHART_PLOT_LEFT}
+            y={CHART_PLOT_TOP}
+            width={CHART_PLOT_WIDTH}
+            height={CHART_PLOT_HEIGHT}
+            fill="transparent"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          />
         )}
       </svg>
       {!hasChart && <p className="chart-empty">No dive profile available.</p>}
@@ -391,27 +639,93 @@ function DiveProfileChart({
   )
 }
 
-function MediaGallery({ media }: { media: DiveLogShareManifestMedia[] }) {
+function MediaGallery({
+  media,
+  activeMediaIndex,
+  itemRefs,
+  onActiveMediaChange,
+}: {
+  media: DiveLogShareManifestMedia[]
+  activeMediaIndex: number
+  itemRefs: MutableRefObject<Array<HTMLElement | null>>
+  onActiveMediaChange: (mediaIndex: number) => void
+}) {
+  const galleryRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (media.length === 0 || !galleryRef.current) {
+      return
+    }
+    const elements = itemRefs.current.filter((element): element is HTMLElement => element !== null)
+    if (elements.length === 0) {
+      return
+    }
+
+    const scrollRoot =
+      galleryRef.current.closest('.phone-shell') instanceof HTMLElement
+        ? (galleryRef.current.closest('.phone-shell') as HTMLElement)
+        : null
+    const ratios = new Map<Element, number>()
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          ratios.set(entry.target, entry.isIntersecting ? entry.intersectionRatio : 0)
+        }
+        let bestIndex = -1
+        let bestRatio = 0
+        elements.forEach((element, index) => {
+          const ratio = ratios.get(element) ?? 0
+          if (ratio > bestRatio) {
+            bestRatio = ratio
+            bestIndex = index
+          }
+        })
+        if (bestIndex >= 0 && bestRatio > 0) {
+          onActiveMediaChange(bestIndex)
+        }
+      },
+      {
+        root: scrollRoot,
+        threshold: [0.25, 0.5, 0.75, 1],
+        rootMargin: '-15% 0px -40% 0px',
+      },
+    )
+
+    elements.forEach((element) => observer.observe(element))
+    return () => observer.disconnect()
+  }, [media, itemRefs, onActiveMediaChange])
+
   if (media.length === 0) {
     return null
   }
 
   return (
-    <section className="media-gallery" aria-label="Shared media">
-      {media.map((item) => {
+    <section ref={galleryRef} className="media-gallery" aria-label="Shared media">
+      {media.map((item, index) => {
         const mediaUrl = assetUrl(item.filePath)
         const posterUrl = item.posterPath ? assetUrl(item.posterPath) : undefined
-        return item.mediaKind === 'video' ? (
-          <video
+        const isActive = index === activeMediaIndex
+        return (
+          <div
             key={item.filePath}
-            src={mediaUrl}
-            poster={posterUrl}
-            controls
-            playsInline
-            preload="metadata"
-          />
-        ) : (
-          <img key={item.filePath} src={mediaUrl} alt={item.originalName || 'Dive media'} />
+            className={isActive ? 'media-gallery-item is-active' : 'media-gallery-item'}
+            ref={(element) => {
+              itemRefs.current[index] = element
+            }}
+            data-media-index={index}
+          >
+            {item.mediaKind === 'video' ? (
+              <video
+                src={mediaUrl}
+                poster={posterUrl}
+                controls
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <img src={mediaUrl} alt={item.originalName || 'Dive media'} />
+            )}
+          </div>
         )
       })}
     </section>
@@ -653,6 +967,7 @@ function normalizeMedia(payload: unknown): DiveLogShareManifestMedia {
     mediaKind: readString(media.mediaKind, 'photo'),
     filePath: readString(media.filePath, ''),
     posterPath: nullableString(media.posterPath),
+    captureOffsetSeconds: nullableNumber(media.captureOffsetSeconds),
   }
 }
 
@@ -662,6 +977,10 @@ function readString(value: unknown, fallback: string): string {
 
 function nullableString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null
+}
+
+function nullableNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 function readNumber(value: unknown, fallback: number): number {
@@ -697,7 +1016,94 @@ function chartPoints(chart: DiveLogShareManifestChart | null): ChartPoint[] {
   })).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
 }
 
+function buildMediaMarkers(
+  media: DiveLogShareManifestMedia[],
+  points: ChartPoint[],
+): MediaMarker[] {
+  if (points.length === 0) {
+    return []
+  }
+  const minTime = points[0].x
+  const maxTime = points[points.length - 1].x
+  const markers: MediaMarker[] = []
+  media.forEach((item, mediaIndex) => {
+    const offset = item.captureOffsetSeconds
+    if (offset === null || offset < minTime || offset > maxTime) {
+      return
+    }
+    markers.push({ mediaIndex, offsetSeconds: offset })
+  })
+  return markers
+}
+
+function nearestMediaMarkerByIndex(
+  markers: MediaMarker[],
+  mediaIndex: number,
+): MediaMarker | null {
+  if (markers.length === 0) {
+    return null
+  }
+  let best: MediaMarker | null = null
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (const marker of markers) {
+    const distance = Math.abs(marker.mediaIndex - mediaIndex)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = marker
+    }
+  }
+  return best
+}
+
+function findClosestIndex(points: ChartPoint[], targetX: number): number {
+  if (points.length === 0) {
+    return 0
+  }
+  let low = 0
+  let high = points.length - 1
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2)
+    if (points[mid].x < targetX) {
+      low = mid + 1
+    } else {
+      high = mid
+    }
+  }
+  if (low === 0) {
+    return 0
+  }
+  const previous = points[low - 1].x
+  const current = points[low].x
+  return Math.abs(previous - targetX) <= Math.abs(current - targetX) ? low - 1 : low
+}
+
+function resolveMarkerLabelLayout(
+  canvasX: number,
+  canvasY: number,
+  label: string,
+): { x: number; y: number; width: number; height: number } {
+  const width = Math.max(88, label.length * 6.2 + 24)
+  const height = 24
+  const gap = 14
+  const outerRadius = 8
+  const rightX = canvasX + outerRadius + gap
+  const leftX = canvasX - outerRadius - gap - width
+  const x =
+    rightX + width <= CHART_PLOT_LEFT + CHART_PLOT_WIDTH
+      ? rightX
+      : Math.max(CHART_PLOT_LEFT, leftX)
+  const y = Math.min(
+    CHART_PLOT_TOP + CHART_PLOT_HEIGHT - height,
+    Math.max(CHART_PLOT_TOP, canvasY - height / 2),
+  )
+  return { x, y, width, height }
+}
+
 /** Matches DiveLogDataGraph plot band: y = 18 + depthRatio * 120. */
+const CHART_VIEW_WIDTH = 350
+const CHART_VIEW_HEIGHT = 156
+const CHART_PLOT_LEFT = 28
+const CHART_PLOT_WIDTH = 316
 const CHART_PLOT_TOP = 18
 const CHART_PLOT_HEIGHT = 120
 /**
@@ -713,7 +1119,7 @@ interface CanvasPoint {
 }
 
 function chartX(value: number, maxTime: number): number {
-  return 28 + (value / maxTime) * 316
+  return CHART_PLOT_LEFT + (value / maxTime) * CHART_PLOT_WIDTH
 }
 
 function chartY(value: number, maxDepth: number): number {
@@ -777,13 +1183,16 @@ function axisDepthLabels(maxDepth: number): string[] {
   return ['0', `${step}m`, `${step * 2}m`, `${step * 3}m`, `${step * 4}m`]
 }
 
-function axisTimeLabels(maxTime: number): string[] {
-  const step = Math.max(1, Math.round(maxTime / 4))
-  return [0, step, step * 2, step * 3, Math.round(maxTime)].map(formatTimeLabel)
+function axisTimeLabels(maxTimeSeconds: number): string[] {
+  const step = Math.max(1, Math.round(maxTimeSeconds / 4))
+  return [0, step, step * 2, step * 3, Math.round(maxTimeSeconds)].map(formatTimeLabel)
 }
 
-function formatTimeLabel(minutes: number): string {
-  return `${Math.max(0, Math.round(minutes))}:00`
+function formatTimeLabel(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.round(totalSeconds))
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  return `${minutes}:${remainder.toString().padStart(2, '0')}`
 }
 
 function listTitle(diveLog: DiveLogShareManifestDiveLog): string {
