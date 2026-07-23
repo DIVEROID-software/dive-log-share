@@ -243,6 +243,7 @@
   margin: 20px -20px 0;
   padding: 12px 20px 8px;
   background: #ffffff;
+  transition: background-color 80ms linear;
 }
 
 .detail-app-bar {
@@ -357,6 +358,7 @@
 .chart-grid-line {
   stroke: #dee2e6;
   stroke-width: 1;
+  opacity: var(--chart-axis-opacity, 1);
 }
 
 .profile-fill {
@@ -366,7 +368,7 @@
 
 .profile-line {
   fill: none;
-  stroke: #198dfa;
+  stroke: url("#profile-line-stroke");
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -378,13 +380,13 @@
 }
 
 .chart-marker-guide {
-  stroke: #198dfa;
+  stroke: #4538c8;
   stroke-width: 1.5;
   stroke-dasharray: 4 4;
 }
 
 .chart-marker-outer {
-  fill: #198dfa;
+  fill: #4538c8;
 }
 
 .chart-marker-inner {
@@ -392,7 +394,7 @@
 }
 
 .chart-marker-label-bg {
-  fill: #198dfa;
+  fill: #4538c8;
 }
 
 .chart-marker-label {
@@ -425,6 +427,7 @@
   font-size: 10px;
   line-height: 16px;
   text-align: right;
+  opacity: var(--chart-axis-opacity, 1);
 }
 
 .chart-x-labels {
@@ -437,6 +440,7 @@
   color: rgba(0, 0, 0, 0.5);
   font-size: 10px;
   line-height: 16px;
+  opacity: var(--chart-axis-opacity, 1);
 }
 
 .media-gallery {

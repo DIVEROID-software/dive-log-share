@@ -261,34 +261,51 @@ function DiveLogDetailScreen({
   )
   const [selectedPointIndex, setSelectedPointIndex] = useState(0)
   const [activeMediaIndex, setActiveMediaIndex] = useState(-1)
-  const chartScrollLockRef = useRef(0)
+  const [chartScrollProgress, setChartScrollProgress] = useState(0)
   const isTouchingChartRef = useRef(false)
+  const programmaticScrollTargetRef = useRef<number | null>(null)
+  const programmaticTimeoutRef = useRef<number | null>(null)
   const mediaItemRefs = useRef<Array<HTMLElement | null>>([])
-  const scrollUnlockTimerRef = useRef<number | null>(null)
+  const stickyChartRef = useRef<HTMLDivElement | null>(null)
+  const detailScreenRef = useRef<HTMLElement | null>(null)
 
-  useEffect(() => {
-    return () => {
-      if (scrollUnlockTimerRef.current !== null) {
-        window.clearTimeout(scrollUnlockTimerRef.current)
+  const clearProgrammaticScroll = useCallback(() => {
+    programmaticScrollTargetRef.current = null
+    if (programmaticTimeoutRef.current !== null) {
+      window.clearTimeout(programmaticTimeoutRef.current)
+      programmaticTimeoutRef.current = null
+    }
+  }, [])
+
+  const applyMediaMarker = useCallback(
+    (mediaIndex: number) => {
+      setActiveMediaIndex(mediaIndex)
+      const marker = nearestMediaMarkerByIndex(mediaMarkers, mediaIndex)
+      if (marker && points.length > 0) {
+        setSelectedPointIndex(findClosestIndex(points, marker.offsetSeconds))
       }
-    }
-  }, [])
+    },
+    [mediaMarkers, points],
+  )
 
-  const scrollMediaIntoView = useCallback((mediaIndex: number) => {
-    const target = mediaItemRefs.current[mediaIndex]
-    if (!target) {
-      return
-    }
-    chartScrollLockRef.current += 1
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    if (scrollUnlockTimerRef.current !== null) {
-      window.clearTimeout(scrollUnlockTimerRef.current)
-    }
-    scrollUnlockTimerRef.current = window.setTimeout(() => {
-      chartScrollLockRef.current = Math.max(0, chartScrollLockRef.current - 1)
-      scrollUnlockTimerRef.current = null
-    }, 700)
-  }, [])
+  const scrollMediaIntoView = useCallback(
+    (mediaIndex: number) => {
+      const target = mediaItemRefs.current[mediaIndex]
+      if (!target) {
+        return
+      }
+      programmaticScrollTargetRef.current = mediaIndex
+      if (programmaticTimeoutRef.current !== null) {
+        window.clearTimeout(programmaticTimeoutRef.current)
+      }
+      programmaticTimeoutRef.current = window.setTimeout(() => {
+        programmaticScrollTargetRef.current = null
+        programmaticTimeoutRef.current = null
+      }, 1500)
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    },
+    [],
+  )
 
   const handleChartPointSelect = useCallback(
     (pointIndex: number, nearbyMediaIndex: number | null) => {
@@ -304,20 +321,98 @@ function DiveLogDetailScreen({
 
   const handleGalleryActiveChange = useCallback(
     (mediaIndex: number) => {
-      if (chartScrollLockRef.current > 0 || isTouchingChartRef.current) {
+      if (isTouchingChartRef.current) {
         return
       }
-      setActiveMediaIndex(mediaIndex)
-      const marker = nearestMediaMarkerByIndex(mediaMarkers, mediaIndex)
-      if (marker && points.length > 0) {
-        setSelectedPointIndex(findClosestIndex(points, marker.offsetSeconds))
+      const programmaticTarget = programmaticScrollTargetRef.current
+      if (programmaticTarget !== null) {
+        if (mediaIndex !== programmaticTarget) {
+          return
+        }
+        clearProgrammaticScroll()
       }
+      applyMediaMarker(mediaIndex)
     },
-    [mediaMarkers, points],
+    [applyMediaMarker, clearProgrammaticScroll],
   )
 
+  useEffect(() => {
+    return () => {
+      if (programmaticTimeoutRef.current !== null) {
+        window.clearTimeout(programmaticTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const detailScreen = detailScreenRef.current
+    const stickyChart = stickyChartRef.current
+    if (!detailScreen || !stickyChart) {
+      return
+    }
+    const scrollRoot =
+      detailScreen.closest('.phone-shell') instanceof HTMLElement
+        ? (detailScreen.closest('.phone-shell') as HTMLElement)
+        : null
+    if (!scrollRoot) {
+      return
+    }
+
+    const updateFadeProgress = () => {
+      const chartRect = stickyChart.getBoundingClientRect()
+      const shellRect = scrollRoot.getBoundingClientRect()
+      const isStuck = chartRect.top <= shellRect.top + 1
+      if (!isStuck) {
+        setChartScrollProgress(0)
+        return
+      }
+      const firstMedia = mediaItemRefs.current.find((element) => element !== null) ?? null
+      if (!firstMedia) {
+        setChartScrollProgress(0)
+        return
+      }
+      const mediaRect = firstMedia.getBoundingClientRect()
+      const overlap = chartRect.bottom - mediaRect.top
+      const progress = Math.min(1, Math.max(0, overlap / Math.max(chartRect.height, 1)))
+      setChartScrollProgress(progress)
+    }
+
+    const cancelProgrammaticScroll = (event: Event) => {
+      if (programmaticScrollTargetRef.current === null) {
+        return
+      }
+      const eventTarget = event.target
+      if (
+        eventTarget instanceof Element &&
+        eventTarget.closest('.sticky-chart, .profile-card, .chart-hit-area')
+      ) {
+        return
+      }
+      clearProgrammaticScroll()
+    }
+
+    const handleScroll = () => {
+      updateFadeProgress()
+    }
+
+    scrollRoot.addEventListener('scroll', handleScroll, { passive: true })
+    scrollRoot.addEventListener('touchstart', cancelProgrammaticScroll, { passive: true })
+    scrollRoot.addEventListener('wheel', cancelProgrammaticScroll, { passive: true })
+    window.addEventListener('resize', updateFadeProgress)
+    updateFadeProgress()
+
+    return () => {
+      scrollRoot.removeEventListener('scroll', handleScroll)
+      scrollRoot.removeEventListener('touchstart', cancelProgrammaticScroll)
+      scrollRoot.removeEventListener('wheel', cancelProgrammaticScroll)
+      window.removeEventListener('resize', updateFadeProgress)
+    }
+  }, [clearProgrammaticScroll, diveLog.diveLogId, diveLog.media.length])
+
+  const stickyBackground = `rgba(255, 255, 255, ${(1 - chartScrollProgress).toFixed(3)})`
+
   return (
-    <article className="screen detail-screen">
+    <article ref={detailScreenRef} className="screen detail-screen">
       <header className="detail-app-bar">
         {showBackButton && (
           <button type="button" className="icon-button" onClick={onBack} aria-label="Back to list">
@@ -336,12 +431,17 @@ function DiveLogDetailScreen({
       </section>
 
       <StatsGrid stats={diveLog.stats} isFreeDiving={diveLog.isFreeDiving} />
-      <div className="sticky-chart">
+      <div
+        ref={stickyChartRef}
+        className="sticky-chart"
+        style={{ backgroundColor: stickyBackground }}
+      >
         <DiveProfileChart
           stats={diveLog.stats}
           points={points}
           mediaMarkers={mediaMarkers}
           selectedPointIndex={selectedPointIndex}
+          scrollProgress={chartScrollProgress}
           onSelectPoint={handleChartPointSelect}
           onTouchingChange={(isTouching) => {
             isTouchingChartRef.current = isTouching
@@ -428,6 +528,7 @@ function DiveProfileChart({
   points,
   mediaMarkers,
   selectedPointIndex,
+  scrollProgress,
   onSelectPoint,
   onTouchingChange,
 }: {
@@ -435,12 +536,14 @@ function DiveProfileChart({
   points: ChartPoint[]
   mediaMarkers: MediaMarker[]
   selectedPointIndex: number
+  scrollProgress: number
   onSelectPoint: (pointIndex: number, nearbyMediaIndex: number | null) => void
   onTouchingChange: (isTouching: boolean) => void
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const lastMediaIndexRef = useRef(-1)
   const hasChart = points.length >= 2
+  const clampedProgress = Math.min(1, Math.max(0, scrollProgress))
   const maxDepth = Math.max(
     1,
     stats?.maxDepth ?? 0,
@@ -473,6 +576,19 @@ function DiveProfileChart({
   const labelLayout = markerCanvas
     ? resolveMarkerLabelLayout(markerCanvas.x, markerCanvas.y, markerLabel)
     : null
+  const guideOpacity = 1 - clampedProgress
+  const axisOpacity = 1 - clampedProgress
+  const lineStops = LINE_GRADIENT_STOPS.map((stop) => ({
+    offset: stop.offset,
+    color: lerpHexColor(stop.color, '#FFFFFF', clampedProgress),
+  }))
+  const areaStops = AREA_GRADIENT_STOPS.map((stop) => {
+    const faded = rgbaFromHex('#FFFFFF', stop.fadeAlpha)
+    return {
+      offset: stop.offset,
+      color: lerpCssColor(stop.color, faded, clampedProgress),
+    }
+  })
 
   const updateFromClientX = (clientX: number) => {
     if (!hasChart || !svgRef.current) {
@@ -529,7 +645,7 @@ function DiveProfileChart({
     updateFromClientX(event.clientX)
   }
 
-  const handlePointerUp = (event: ReactPointerEvent<SVGRectElement>) => {
+  const clearTouching = (event: ReactPointerEvent<SVGRectElement>) => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
@@ -537,7 +653,11 @@ function DiveProfileChart({
   }
 
   return (
-    <section className="profile-card" aria-label="Dive profile chart">
+    <section
+      className="profile-card"
+      aria-label="Dive profile chart"
+      style={{ ['--chart-axis-opacity' as string]: axisOpacity.toFixed(3) }}
+    >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${CHART_VIEW_WIDTH} ${CHART_VIEW_HEIGHT}`}
@@ -546,9 +666,22 @@ function DiveProfileChart({
       >
         <defs>
           <linearGradient id="profile-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#BCE7FF" />
-            <stop offset="46%" stopColor="#248EFA" />
-            <stop offset="100%" stopColor="#612FD4" />
+            {areaStops.map((stop) => (
+              <stop
+                key={`fill-${stop.offset}`}
+                offset={`${stop.offset * 100}%`}
+                stopColor={stop.color}
+              />
+            ))}
+          </linearGradient>
+          <linearGradient id="profile-line-stroke" x1="0" x2="1" y1="0" y2="0">
+            {lineStops.map((stop) => (
+              <stop
+                key={`line-${stop.offset}`}
+                offset={`${stop.offset * 100}%`}
+                stopColor={stop.color}
+              />
+            ))}
           </linearGradient>
         </defs>
         {[0, 1, 2, 3, 4].map((lineIndex) => (
@@ -575,6 +708,7 @@ function DiveProfileChart({
               x2={markerCanvas.x}
               y1={markerCanvas.y}
               y2={CHART_PLOT_TOP + CHART_PLOT_HEIGHT}
+              style={{ opacity: guideOpacity }}
             />
             <circle
               className="chart-marker-outer"
@@ -619,8 +753,9 @@ function DiveProfileChart({
             fill="transparent"
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
+            onPointerUp={clearTouching}
+            onPointerCancel={clearTouching}
+            onLostPointerCapture={() => onTouchingChange(false)}
           />
         )}
       </svg>
@@ -1112,10 +1247,80 @@ const CHART_PLOT_HEIGHT = 120
  */
 const CUBIC_CURVATURE = 0.5
 const CUBIC_Y_MULTIPLIER = 4
+/** Mirrors DiveLogDataGraph.lineGradient stops. */
+const LINE_GRADIENT_STOPS: Array<{ offset: number; color: string }> = [
+  { offset: 0, color: '#EDF6FF' },
+  { offset: 0.1127, color: '#198DFA' },
+  { offset: 0.5276, color: '#2617BC' },
+  { offset: 0.8497, color: '#198DFA' },
+  { offset: 1, color: '#ECF6FF' },
+]
+/** Mirrors DiveLogDataGraph.areaGradient stops and fadedWhite alphas. */
+const AREA_GRADIENT_STOPS: Array<{ offset: number; color: string; fadeAlpha: number }> = [
+  { offset: 0, color: '#F7FBFF', fadeAlpha: 0 },
+  { offset: 0.2131, color: '#BEE0FF', fadeAlpha: 0.25 },
+  { offset: 0.4805, color: '#3C9EFB', fadeAlpha: 0.51 },
+  { offset: 0.7604, color: '#5D52CE', fadeAlpha: 0.76 },
+  { offset: 1, color: '#4538C8', fadeAlpha: 1 },
+]
 
 interface CanvasPoint {
   x: number
   y: number
+}
+
+function parseHexColor(hex: string): { r: number; g: number; b: number } {
+  const normalized = hex.replace('#', '')
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  }
+}
+
+function rgbaFromHex(hex: string, alpha: number): string {
+  const { r, g, b } = parseHexColor(hex)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function lerpHexColor(fromHex: string, toHex: string, progress: number): string {
+  const from = parseHexColor(fromHex)
+  const to = parseHexColor(toHex)
+  const t = Math.min(1, Math.max(0, progress))
+  const r = Math.round(from.r + (to.r - from.r) * t)
+  const g = Math.round(from.g + (to.g - from.g) * t)
+  const b = Math.round(from.b + (to.b - from.b) * t)
+  return `rgb(${r}, ${g}, ${b})`
+}
+
+function parseCssColor(color: string): { r: number; g: number; b: number; a: number } {
+  if (color.startsWith('#')) {
+    const { r, g, b } = parseHexColor(color)
+    return { r, g, b, a: 1 }
+  }
+  const match = color.match(
+    /rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)/,
+  )
+  if (!match) {
+    return { r: 255, g: 255, b: 255, a: 1 }
+  }
+  return {
+    r: Number(match[1]),
+    g: Number(match[2]),
+    b: Number(match[3]),
+    a: match[4] === undefined ? 1 : Number(match[4]),
+  }
+}
+
+function lerpCssColor(fromColor: string, toColor: string, progress: number): string {
+  const from = parseCssColor(fromColor)
+  const to = parseCssColor(toColor)
+  const t = Math.min(1, Math.max(0, progress))
+  const r = Math.round(from.r + (to.r - from.r) * t)
+  const g = Math.round(from.g + (to.g - from.g) * t)
+  const b = Math.round(from.b + (to.b - from.b) * t)
+  const a = from.a + (to.a - from.a) * t
+  return `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)})`
 }
 
 function chartX(value: number, maxTime: number): number {
