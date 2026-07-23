@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+
+# Dockerfile cho môi trường phát triển: chạy Vite dev server với hot reload.
+FROM node:24-alpine
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+EXPOSE 5173
+
+# --host để Vite lắng nghe trên mọi interface (truy cập được từ ngoài container)
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

@@ -1,0 +1,21 @@
+# Development: Vite dev server với hot reload.
+# Dùng: docker compose -f docker-compose.dev.yml up --build
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: dive-log-share-dev
+    ports:
+      - "${DEV_PORT:-5173}:5173"
+    environment:
+      # Cần thiết để HMR hoạt động ổn định trong container (file watching)
+      CHOKIDAR_USEPOLLING: "true"
+      # Dev server phục vụ ở root
+      VITE_BASE_PATH: /
+      # Base URL của API cho môi trường dev
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://diveroid30api.diveroid.com}
+    volumes:
+      # Mount source để chỉnh code là reload ngay, giữ node_modules trong container
+      - .:/app
+      - /app/node_modules

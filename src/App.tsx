@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const STORAGE_BASE_URL =
-  'https://diveroid30api.diveroid.com/storage/v1/object/public/dive_log_share'
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL ?? 'https://supabase.diveroid.shop'
+).replace(/\/+$/, '')
+const STORAGE_BASE_URL = `${API_BASE_URL}/storage/v1/object/public/dive_log_share`
 const DOWNLOAD_URL = 'https://www.diveroid.com/'
 const DIVEROID_LOGO_URL = `${import.meta.env.BASE_URL}diveroid_logo.svg`
 const DIVEROID_FULL_LOGO_URL = `${import.meta.env.BASE_URL}diveroid_full_logo.svg`
