@@ -695,28 +695,79 @@ function chartPoints(chart: DiveLogShareManifestChart | null): ChartPoint[] {
   })).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
 }
 
+/** Matches DiveLogDataGraph plot band: y = 18 + depthRatio * 120. */
+const CHART_PLOT_TOP = 18
+const CHART_PLOT_HEIGHT = 120
+/**
+ * Same defaults as Vico `LineCartesianLayer.PointConnector.cubic()`
+ * (curvature = 0.5, Y_MULTIPLIER = 4).
+ */
+const CUBIC_CURVATURE = 0.5
+const CUBIC_Y_MULTIPLIER = 4
+
+interface CanvasPoint {
+  x: number
+  y: number
+}
+
 function chartX(value: number, maxTime: number): number {
   return 28 + (value / maxTime) * 316
 }
 
 function chartY(value: number, maxDepth: number): number {
-  return 18 + (Math.abs(value) / maxDepth) * 120
+  return CHART_PLOT_TOP + (Math.abs(value) / maxDepth) * CHART_PLOT_HEIGHT
+}
+
+function toCanvasPoints(
+  points: ChartPoint[],
+  maxTime: number,
+  maxDepth: number,
+): CanvasPoint[] {
+  return points.map((point) => ({
+    x: chartX(point.x, maxTime),
+    y: chartY(point.y, maxDepth),
+  }))
+}
+
+/**
+ * Cubic Bézier connector matching Vico CubicPointConnector:
+ * xDelta = min(1, 4 * |dy| / plotHeight) * curvature * dx
+ * cubicTo(x1 + xDelta, y1, x2 - xDelta, y2, x2, y2)
+ */
+function cubicLinePath(canvasPoints: CanvasPoint[]): string {
+  if (canvasPoints.length === 0) {
+    return ''
+  }
+
+  const first: CanvasPoint = canvasPoints[0]
+  let path: string = `M${first.x.toFixed(2)} ${first.y.toFixed(2)}`
+
+  for (let index = 1; index < canvasPoints.length; index += 1) {
+    const previous: CanvasPoint = canvasPoints[index - 1]
+    const current: CanvasPoint = canvasPoints[index]
+    const xDelta: number =
+      Math.min(1, (CUBIC_Y_MULTIPLIER * Math.abs(current.y - previous.y)) / CHART_PLOT_HEIGHT) *
+      CUBIC_CURVATURE *
+      (current.x - previous.x)
+    path +=
+      ` C${(previous.x + xDelta).toFixed(2)} ${previous.y.toFixed(2)}` +
+      ` ${(current.x - xDelta).toFixed(2)} ${current.y.toFixed(2)}` +
+      ` ${current.x.toFixed(2)} ${current.y.toFixed(2)}`
+  }
+
+  return path
 }
 
 function linePath(points: ChartPoint[], maxTime: number, maxDepth: number): string {
-  return points
-    .map((point, index) => {
-      const command = index === 0 ? 'M' : 'L'
-      return `${command}${chartX(point.x, maxTime).toFixed(2)} ${chartY(point.y, maxDepth).toFixed(2)}`
-    })
-    .join(' ')
+  return cubicLinePath(toCanvasPoints(points, maxTime, maxDepth))
 }
 
 function areaPath(points: ChartPoint[], maxTime: number, maxDepth: number): string {
-  const line = linePath(points, maxTime, maxDepth)
-  const first = points[0]
-  const last = points[points.length - 1]
-  return `${line} L${chartX(last.x, maxTime).toFixed(2)} 18 L${chartX(first.x, maxTime).toFixed(2)} 18 Z`
+  const canvasPoints: CanvasPoint[] = toCanvasPoints(points, maxTime, maxDepth)
+  const line: string = cubicLinePath(canvasPoints)
+  const first: CanvasPoint = canvasPoints[0]
+  const last: CanvasPoint = canvasPoints[canvasPoints.length - 1]
+  return `${line} L${last.x.toFixed(2)} ${CHART_PLOT_TOP} L${first.x.toFixed(2)} ${CHART_PLOT_TOP} Z`
 }
 
 function axisDepthLabels(maxDepth: number): string[] {
