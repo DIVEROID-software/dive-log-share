@@ -16,6 +16,7 @@ const STORAGE_BASE_URL = `${API_BASE_URL}/storage/v1/object/public/dive_log_shar
 const DOWNLOAD_URL = 'https://www.diveroid.com/'
 const DIVEROID_LOGO_URL = `${import.meta.env.BASE_URL}diveroid_logo.svg`
 const DIVEROID_FULL_LOGO_URL = `${import.meta.env.BASE_URL}diveroid_full_logo.svg`
+const ICON_BASE_URL = `${import.meta.env.BASE_URL}icons/`
 
 interface DiveLogShareManifest {
   schemaVersion: number
@@ -33,6 +34,7 @@ interface DiveLogShareManifestDiveLog {
   tabTitle: string
   diveDisplayIndex: number
   isFreeDiving: boolean
+  isSurfaceTime: boolean
   dateText: string
   locationText: string
   stats: DiveLogShareManifestStats | null
@@ -182,12 +184,21 @@ function App() {
           loadState.status === 'success' &&
           loadState.shareId === route.shareId &&
           (selectedDiveLog ? (
-            <DiveLogDetailScreen
-              key={selectedDiveLog.diveLogId}
-              diveLog={selectedDiveLog}
-              showBackButton={route.shareType !== 'single'}
-              onBack={closeDiveLog}
-            />
+            isSurfaceTimeLog(selectedDiveLog) ? (
+              <SurfaceTimeDetailScreen
+                key={selectedDiveLog.diveLogId}
+                diveLog={selectedDiveLog}
+                showBackButton={route.shareType !== 'single'}
+                onBack={closeDiveLog}
+              />
+            ) : (
+              <DiveLogDetailScreen
+                key={selectedDiveLog.diveLogId}
+                diveLog={selectedDiveLog}
+                showBackButton={route.shareType !== 'single'}
+                onBack={closeDiveLog}
+              />
+            )
           ) : (
             <DiveLogListScreen
               manifest={loadState.manifest}
@@ -211,7 +222,7 @@ function DiveLogListScreen({
       <header className="list-hero">
         <DiveroidLogo />
         <h1>
-          Take a look at
+          <span>Take a look at</span>
           <span>Shared Dive Log</span>
         </h1>
       </header>
@@ -231,9 +242,13 @@ function DiveLogListScreen({
                 <span className="item-copy">
                   <span className="item-date">{fallbackText(diveLog.dateText, 'Date unknown')}</span>
                   <span className="item-title">{listTitle(diveLog)}</span>
-                  <span className="item-location">{listLocation(diveLog.locationText)}</span>
+                  <ListLocation locationText={diveLog.locationText} />
                 </span>
-                <ChevronIcon />
+                <FigmaIcon
+                  name="ic_l_arrow_right_g_16"
+                  className="item-chevron"
+                  size={16}
+                />
               </button>
             </li>
           ))}
@@ -242,6 +257,75 @@ function DiveLogListScreen({
 
       <DownloadBanner />
     </div>
+  )
+}
+
+function SurfaceTimeDetailScreen({
+  diveLog,
+  showBackButton,
+  onBack,
+}: {
+  diveLog: DiveLogShareManifestDiveLog
+  showBackButton: boolean
+  onBack: () => void
+}) {
+  return (
+    <article className="screen detail-screen surface-time-screen">
+      <header className="detail-app-bar">
+        {showBackButton && (
+          <button type="button" className="icon-button" onClick={onBack} aria-label="Back to list">
+            <FigmaIcon name="ic_l_back_24" className="back-icon" />
+          </button>
+        )}
+      </header>
+
+      <section className="detail-intro surface-time-intro">
+        <p className="owner-label">Shared Log</p>
+        <h1>{surfaceTimeTitle(diveLog)}</h1>
+        <p className="surface-time-date">{fallbackText(diveLog.dateText, 'Date unknown')}</p>
+      </section>
+
+      <SurfaceTimeMediaGallery media={diveLog.media} />
+      <DownloadBanner />
+    </article>
+  )
+}
+
+function SurfaceTimeMediaGallery({ media }: { media: DiveLogShareManifestMedia[] }) {
+  if (media.length === 0) {
+    return null
+  }
+
+  return (
+    <section className="surface-time-gallery" aria-label="Shared media">
+      {media.map((item) => {
+        const mediaUrl = assetUrl(item.filePath)
+        const posterUrl = item.posterPath ? assetUrl(item.posterPath) : undefined
+        const isVideo = item.mediaKind === 'video'
+        return (
+          <div key={item.filePath} className="surface-time-gallery-item">
+            {isVideo ? (
+              <>
+                <video
+                  src={mediaUrl}
+                  poster={posterUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                />
+                <FigmaIcon
+                  name="ic_s_pause_32"
+                  className="surface-time-video-badge"
+                  size={32}
+                />
+              </>
+            ) : (
+              <img src={mediaUrl} alt={item.originalName || 'Dive media'} />
+            )}
+          </div>
+        )
+      })}
+    </section>
   )
 }
 
@@ -416,7 +500,7 @@ function DiveLogDetailScreen({
       <header className="detail-app-bar">
         {showBackButton && (
           <button type="button" className="icon-button" onClick={onBack} aria-label="Back to list">
-            <BackIcon />
+            <FigmaIcon name="ic_l_back_24" className="back-icon" />
           </button>
         )}
       </header>
@@ -425,8 +509,12 @@ function DiveLogDetailScreen({
         <p className="owner-label">Shared Log</p>
         <h1>{detailTitle(diveLog)}</h1>
         <div className="detail-meta">
-          <span>{fallbackText(diveLog.dateText, 'Date unknown')}</span>
-          <span>{fallbackText(diveLog.locationText, 'Location unknown')}</span>
+          <span className="detail-meta-date">
+            {fallbackText(diveLog.dateText, 'Date unknown')}
+          </span>
+          <span className="detail-meta-location">
+            {fallbackText(diveLog.locationText, 'Location unknown')}
+          </span>
         </div>
       </section>
 
@@ -454,6 +542,7 @@ function DiveLogDetailScreen({
         itemRefs={mediaItemRefs}
         onActiveMediaChange={handleGalleryActiveChange}
       />
+      <DownloadBanner />
     </article>
   )
 }
@@ -471,29 +560,24 @@ function StatsGrid({
   return (
     <section className="stats-grid" aria-label="Dive statistics">
       <StatItem
-        icon={<DepthIcon />}
+        icon={<FigmaIcon name="ic_l_max_depth_24" />}
         label="Max Depth"
         value={formatNumber(stats?.maxDepth)}
         unit="m"
       />
       <StatItem
-        icon={<TimeIcon />}
+        icon={<FigmaIcon name="ic_l_diving_time_24" />}
         label="Dive Time"
         value={formatNumber(stats?.diveTime)}
         unit="min"
       />
       <StatItem
-        icon={<TemperatureIcon />}
+        icon={<FigmaIcon name="ic_l_water_temperature_24" />}
         label={temperatureLabel}
         value={formatNumber(temperatureValue)}
         unit="℃"
       />
-      <StatItem
-        icon={<GasIcon />}
-        label="Gas Type"
-        value={formatGasType(stats?.gasType)}
-        compact
-      />
+      <GasTypeStatItem gasType={stats?.gasType} />
     </section>
   )
 }
@@ -503,21 +587,45 @@ function StatItem({
   label,
   value,
   unit,
-  compact = false,
 }: {
   icon: React.ReactNode
   label: string
   value: string
   unit?: string
-  compact?: boolean
 }) {
   return (
     <div className="stat-item">
       <p>{label}</p>
-      <div className={compact ? 'stat-value stat-value-compact' : 'stat-value'}>
+      <div className="stat-value">
         {icon}
-        <span>{value}</span>
-        {unit && <small>{unit}</small>}
+        <span className="stat-metrics">
+          <span className="stat-number">{value}</span>
+          {unit && <small>{unit}</small>}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function GasTypeStatItem({ gasType }: { gasType: string | undefined }) {
+  const parts = parseGasTypeParts(gasType)
+
+  return (
+    <div className="stat-item">
+      <p>Gas Type</p>
+      <div className="stat-value">
+        <FigmaIcon name="ic_l_air_24" />
+        {parts ? (
+          <span className="stat-metrics">
+            {parts.leading ? <small>{parts.leading}</small> : null}
+            <span className="stat-number">{parts.numeric}</span>
+            {parts.trailing ? <small>{parts.trailing}</small> : null}
+          </span>
+        ) : (
+          <span className="stat-metrics">
+            <span className="stat-number">—</span>
+          </span>
+        )}
       </div>
     </div>
   )
@@ -929,66 +1037,24 @@ function LogoMark() {
   return <img className="logo-mark" src={DIVEROID_LOGO_URL} alt="" aria-hidden="true" />
 }
 
-function ChevronIcon() {
+function FigmaIcon({
+  name,
+  className = 'stat-icon',
+  size = 24,
+}: {
+  name: string
+  className?: string
+  size?: number
+}) {
   return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" className="chevron-icon">
-      <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  )
-}
-
-function BackIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M14.5 5 7.5 12l7 7" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 12h12" fill="none" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  )
-}
-
-function DepthIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3 4h18M3 20h18" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M12 6v11m0 0-3-3m3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  )
-}
-
-function TimeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="13" r="7" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M9 3h6M12 6v2m0 5V9" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  )
-}
-
-function TemperatureIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M10 5a2 2 0 1 1 4 0v8.2a5 5 0 1 1-4 0V5Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <path d="M12 14v-4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  )
-}
-
-function GasIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M9 5.5h6l1 3.5v10H8V9l1-3.5ZM10 3h4v2.5h-4V3Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <path d="M9 11h6M9 15h6" fill="none" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
+    <img
+      className={className}
+      src={`${ICON_BASE_URL}${name}.svg`}
+      alt=""
+      width={size}
+      height={size}
+      aria-hidden="true"
+    />
   )
 }
 
@@ -1049,6 +1115,8 @@ function normalizeDiveLog(payload: unknown): DiveLogShareManifestDiveLog {
     tabTitle: readString(diveLog.tabTitle, ''),
     diveDisplayIndex: readNumber(diveLog.diveDisplayIndex, 0),
     isFreeDiving: readBoolean(diveLog.isFreeDiving, false),
+    isSurfaceTime:
+      readBoolean(diveLog.isSurfaceTime, false) || inferIsSurfaceTime(diveLog),
     dateText: readString(diveLog.dateText, ''),
     locationText: readString(diveLog.locationText, ''),
     stats: normalizeStats(diveLog.stats),
@@ -1410,6 +1478,9 @@ function listTitle(diveLog: DiveLogShareManifestDiveLog): string {
 }
 
 function detailTitle(diveLog: DiveLogShareManifestDiveLog): string {
+  if (isSurfaceTimeLog(diveLog)) {
+    return surfaceTimeTitle(diveLog)
+  }
   const title = listTitle(diveLog)
   if (title.startsWith('Scuba #')) {
     return title.replace('Scuba #', 'Scuba Diving #')
@@ -1420,15 +1491,92 @@ function detailTitle(diveLog: DiveLogShareManifestDiveLog): string {
   return title
 }
 
-function listLocation(locationText: string): string {
-  const parts = locationText
+function surfaceTimeTitle(diveLog: DiveLogShareManifestDiveLog): string {
+  const title = listTitle(diveLog)
+  if (/^surface time(\s+\d+)?$/i.test(title)) {
+    return 'Surface Time'
+  }
+  return title
+}
+
+function isSurfaceTimeLog(diveLog: DiveLogShareManifestDiveLog): boolean {
+  if (diveLog.isSurfaceTime) {
+    return true
+  }
+  const tabTitle = normalizeShareTitle(diveLog.tabTitle)
+  if (tabTitle === 'surface time' || /^surface time \d+$/.test(tabTitle)) {
+    return true
+  }
+  const displayTitle = normalizeShareTitle(listTitle(diveLog))
+  if (displayTitle === 'surface time' || /^surface time \d+$/.test(displayTitle)) {
+    return true
+  }
+  return hasSurfaceTimeShareFingerprint(diveLog)
+}
+
+function normalizeShareTitle(value: string): string {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase()
+}
+
+function hasEmptyShareChart(chart: DiveLogShareManifestChart | null): boolean {
+  return chartPoints(chart).length === 0
+}
+
+function hasSurfaceTimeShareStats(stats: DiveLogShareManifestStats | null): boolean {
+  if (!stats) {
+    return true
+  }
+  const gasType = stats.gasType.trim()
+  return (
+    stats.maxDepth <= 0 &&
+    stats.diveTime <= 0 &&
+    stats.bottomTemp <= 0 &&
+    stats.surfaceTemp <= 0 &&
+    (gasType === '' || gasType === '—' || gasType === '-' || gasType === '–')
+  )
+}
+
+function hasSurfaceTimeShareFingerprint(diveLog: DiveLogShareManifestDiveLog): boolean {
+  if (!hasEmptyShareChart(diveLog.chart) || !hasSurfaceTimeShareStats(diveLog.stats)) {
+    return false
+  }
+  const combined = `${diveLog.tabTitle} ${listTitle(diveLog)}`.toLowerCase()
+  return combined.includes('surface')
+}
+
+function inferIsSurfaceTime(diveLog: Record<string, unknown>): boolean {
+  const tabTitle = normalizeShareTitle(readString(diveLog.tabTitle, ''))
+  return tabTitle === 'surface time' || /^surface time \d+$/.test(tabTitle)
+}
+
+function listLocationParts(locationText: string): [string] | [string, string] {
+  const normalized = locationText.replace(/\s+\|\s+/g, ', ')
+  const parts = normalized
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean)
   if (parts.length >= 2) {
-    return `${parts[0]}  |  ${parts[1]}`
+    return [parts[parts.length - 2], parts[parts.length - 1]]
   }
-  return fallbackText(locationText, 'Location unknown')
+  if (parts.length === 1) {
+    return [parts[0]]
+  }
+  return ['Location unknown']
+}
+
+function ListLocation({ locationText }: { locationText: string }) {
+  const parts = listLocationParts(locationText)
+  return (
+    <span className="item-location">
+      <span>{parts[0]}</span>
+      {parts[1] ? (
+        <>
+          <span className="item-location-divider" aria-hidden="true" />
+          <span>{parts[1]}</span>
+        </>
+      ) : null}
+    </span>
+  )
 }
 
 function fallbackText(value: string, fallback: string): string {
@@ -1439,9 +1587,35 @@ function formatNumber(value: number | undefined): string {
   return typeof value === 'number' && value > 0 ? Math.round(value).toString() : '—'
 }
 
-function formatGasType(value: string | undefined): string {
-  const gasType = value?.trim()
-  return gasType || '—'
+function parseGasTypeParts(
+  value: string | undefined,
+): { leading: string; numeric: string; trailing: string } | null {
+  const raw = value?.trim() ?? ''
+  if (!raw || raw === '—') {
+    return null
+  }
+
+  const compact = raw.replace(/\s+/g, ' ')
+  const airMatch = /^(?:ean|air)\s*21(?:\s*[([].*[)\]])?$/i.exec(compact)
+  if (airMatch) {
+    return { leading: 'EAN', numeric: '21', trailing: '[Air]' }
+  }
+
+  const match = /^([^\d]*)(\d+)(.*)$/.exec(compact)
+  if (!match) {
+    return { leading: '', numeric: compact, trailing: '' }
+  }
+
+  let leading = match[1].trim()
+  if (/^air$/i.test(leading) || leading === '') {
+    leading = 'EAN'
+  }
+  const numeric = match[2]
+  let trailing = match[3].trim().replace(/^\((.*)\)$/, '[$1]')
+  if (numeric === '21' && trailing === '') {
+    trailing = '[Air]'
+  }
+  return { leading, numeric, trailing }
 }
 
 export default App

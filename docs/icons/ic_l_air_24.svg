@@ -1,0 +1,18 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="ic_l_air_b_24">
+<path id="Rectangle 4617" d="M12 5.05C14.6234 5.05 16.75 7.17665 16.75 9.8V22.0002C16.7499 22.1382 16.638 22.2502 16.5 22.2502H7.5C7.36199 22.2502 7.25011 22.1382 7.25 22.0002V9.8C7.25 7.17665 9.37665 5.05 12 5.05Z" stroke="black" stroke-width="1.5"/>
+<path id="Vector 479" d="M7.59961 10.8999H16.3996" stroke="black" stroke-width="1.5"/>
+<path id="Vector 480" d="M7.59961 15.3H16.3996" stroke="black" stroke-width="1.5"/>
+<g id="Mask group">
+<mask id="mask0_0_141" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="8" y="1" width="8" height="5">
+<path id="Vector 487" d="M13.1012 5.95V4.3V2.65H10.9012V5.95H8.70117V1H15.3012V5.95H13.1012Z" fill="black"/>
+</mask>
+<g mask="url(#mask0_0_141)">
+<path id="Rectangle 4618" d="M10.252 1.75H13.752C13.89 1.75 14.002 1.86193 14.002 2V5.2002H10.002V2C10.002 1.86193 10.1139 1.75 10.252 1.75Z" stroke="black" stroke-width="1.5"/>
+</g>
+</g>
+<path id="Vector 485" d="M6.5 3.2H9.8" stroke="black" stroke-width="1.5"/>
+<path id="Vector 488" d="M6.5 1V5.4" stroke="black" stroke-width="1.5"/>
+<path id="Vector 486" d="M14.1992 3.19995H16.3992" stroke="black" stroke-width="1.5"/>
+</g>
+</svg>
