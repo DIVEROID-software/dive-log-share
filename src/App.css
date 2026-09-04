@@ -6,7 +6,7 @@
 }
 
 .phone-shell {
-  width: min(100vw, 430px);
+  width: min(100vw, 390px);
   min-height: 100svh;
   max-height: 100svh;
   overflow-x: hidden;
@@ -25,7 +25,7 @@
 
 .list-screen {
   position: relative;
-  padding: 84px 20px 128px;
+  padding: calc(40px + env(safe-area-inset-top, 0px)) 20px 128px;
 }
 
 .list-hero {
@@ -36,20 +36,22 @@
   width: 96px;
   height: 20px;
   display: block;
-  margin-bottom: 17px;
+  margin-bottom: 16px;
 }
 
 .list-hero h1,
 .detail-intro h1 {
   margin: 0;
   color: #000000;
-  font-weight: 500;
   letter-spacing: 0;
 }
 
 .list-hero h1 {
+  font-family: "Spoqa Han Sans Neo", sans-serif;
   font-size: 28px;
   line-height: 36px;
+  font-weight: 500;
+  letter-spacing: -0.28px;
 }
 
 .list-hero h1 span {
@@ -63,27 +65,37 @@
 }
 
 .dive-log-list li {
-  border-bottom: 1px solid #dee2e6;
+  position: relative;
 }
 
-.dive-log-list li:first-child {
-  border-top: 0;
+.dive-log-list li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: #dee2e6;
 }
 
 .dive-log-item {
   width: 100%;
-  min-height: 116px;
+  min-height: 76px;
   border: 0;
   background: transparent;
   color: inherit;
   display: grid;
   grid-template-columns: 110px minmax(0, 1fr) 16px;
-  align-items: center;
-  gap: 16px;
+  align-items: start;
+  column-gap: 16px;
   padding: 20px 0;
   text-align: left;
   cursor: pointer;
   font: inherit;
+}
+
+.dive-log-list li:first-child .dive-log-item {
+  padding-top: 0;
 }
 
 .dive-log-item:focus-visible,
@@ -99,6 +111,7 @@
   border-radius: 8px;
   overflow: hidden;
   display: grid;
+  gap: 0;
   background: #e9ecef;
 }
 
@@ -115,13 +128,14 @@
 }
 
 .mosaic-count-2 {
-  grid-template-rows: repeat(2, 1fr);
+  grid-template-columns: 110px;
+  grid-template-rows: 38px 38px;
 }
 
 .mosaic-count-3,
 .mosaic-count-4 {
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, 1fr);
+  grid-template-columns: 55px 55px;
+  grid-template-rows: 38px 38px;
 }
 
 .mosaic-count-3 img:first-child {
@@ -145,16 +159,19 @@
 
 .item-date {
   color: #000000;
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
   font-size: 13px;
   line-height: 18px;
+  font-weight: 400;
   letter-spacing: 0;
-  margin-bottom: 1px;
 }
 
 .item-title {
   color: #000000;
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
   font-size: 18px;
   line-height: 28px;
+  font-weight: 400;
   letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -162,27 +179,52 @@
 }
 
 .item-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 12px;
   color: #868e96;
   font-size: 13px;
   line-height: 16px;
-  letter-spacing: 0;
-  margin-top: 6px;
+  letter-spacing: -0.13px;
+}
+
+.item-location > span:not(.item-location-divider) {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.chevron-icon {
+.item-location > span:first-child {
+  flex: 0 1 auto;
+}
+
+.item-location > span:last-child {
+  flex: 1 1 0;
+}
+
+.item-location-divider {
+  width: 1px;
+  height: 10px;
+  flex: 0 0 auto;
+  background: #868e96;
+  opacity: 0.5;
+}
+
+.item-chevron {
   width: 16px;
   height: 16px;
-  color: #9aa3ad;
+  margin-top: 30px;
+  display: block;
 }
 
 .download-banner {
   position: fixed;
   left: 50%;
   bottom: max(14px, env(safe-area-inset-bottom));
-  width: min(calc(100vw - 40px), 390px);
+  width: min(calc(100vw - 40px), 350px);
   box-sizing: border-box;
   transform: translateX(-50%);
   min-height: 56px;
@@ -192,7 +234,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   padding: 12px 10px 12px 16px;
   color: #000000;
   text-decoration: none;
@@ -203,10 +245,11 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: #000000;
   font-size: 13px;
   line-height: 16px;
+  letter-spacing: -0.13px;
   white-space: nowrap;
   overflow: hidden;
 }
@@ -229,35 +272,37 @@
   color: #ffffff;
   font-size: 13px;
   line-height: 16px;
-  padding: 8px 11px;
+  letter-spacing: -0.13px;
+  padding: 6px 10px;
 }
 
 .detail-screen {
-  padding: 44px 20px 48px;
+  padding: 0 20px 128px;
 }
 
 .sticky-chart {
   position: sticky;
   top: 0;
   z-index: 5;
-  margin: 20px -20px 0;
-  padding: 12px 20px 8px;
+  margin: 32px -20px 0;
+  padding: 8px 20px 0;
   background: #ffffff;
   transition: background-color 80ms linear;
 }
 
 .detail-app-bar {
-  height: 50px;
+  height: calc(49px + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
   display: flex;
   align-items: center;
-  margin-left: -8px;
 }
 
 .icon-button {
-  width: 40px;
-  height: 40px;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: 0;
-  border-radius: 20px;
   background: transparent;
   color: #000000;
   display: inline-grid;
@@ -265,13 +310,20 @@
   cursor: pointer;
 }
 
-.icon-button svg {
+.icon-button::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+}
+
+.back-icon {
   width: 24px;
   height: 24px;
+  display: block;
 }
 
 .detail-intro {
-  margin-top: 20px;
+  margin-top: 24px;
 }
 
 .owner-label {
@@ -279,37 +331,53 @@
   font-size: 15px;
   line-height: 20px;
   font-weight: 700;
-  margin: 0 0 20px;
+  letter-spacing: -0.15px;
+  margin: 0 0 16px;
 }
 
 .detail-intro h1 {
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
   font-size: 28px;
   line-height: 36px;
+  font-weight: 400;
 }
 
 .detail-meta {
   display: grid;
   grid-template-columns: 70px minmax(0, 1fr);
-  gap: 12px;
+  align-items: start;
+  column-gap: 12px;
   margin-top: 10px;
   color: #000000;
+}
+
+.detail-meta-date {
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
   font-size: 13px;
   line-height: 18px;
+  letter-spacing: 0;
+}
+
+.detail-meta-location {
+  font-size: 13px;
+  line-height: 16px;
+  letter-spacing: -0.13px;
 }
 
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 40px;
-  row-gap: 21px;
-  margin-top: 35px;
+  column-gap: 0;
+  row-gap: 19px;
+  margin-top: 32px;
 }
 
 .stat-item p {
-  margin: 0 0 6px;
+  margin: 0 0 2px;
   color: #868e96;
   font-size: 13px;
   line-height: 18px;
+  letter-spacing: -0.13px;
 }
 
 .stat-value {
@@ -317,28 +385,43 @@
   align-items: center;
   min-width: 0;
   color: #000000;
-  font-size: 28px;
-  line-height: 36px;
+  gap: 4px;
   white-space: nowrap;
 }
 
-.stat-value svg {
+.stat-icon {
   width: 24px;
   height: 24px;
   flex: 0 0 auto;
-  margin-right: 5px;
+  display: block;
 }
 
-.stat-value small {
+.stat-metrics {
+  display: flex;
+  align-items: flex-end;
+  height: 36px;
+  min-width: 0;
+}
+
+.stat-number {
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
+  font-size: 28px;
+  line-height: 28px;
+  font-weight: 400;
+}
+
+.stat-metrics small {
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
   color: #000000;
   font-size: 18px;
-  line-height: 28px;
+  line-height: 18px;
+  font-weight: 400;
   margin-left: 4px;
 }
 
-.stat-value-compact {
-  font-size: 20px;
-  line-height: 30px;
+.stat-metrics small:first-child {
+  margin-left: 0;
+  margin-right: 4px;
 }
 
 .profile-card {
@@ -409,6 +492,7 @@
   right: 0;
   top: 66px;
   color: #868e96;
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
   font-size: 13px;
   line-height: 18px;
   text-align: center;
@@ -424,6 +508,7 @@
   flex-direction: column;
   justify-content: space-between;
   color: rgba(0, 0, 0, 0.5);
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
   font-size: 10px;
   line-height: 16px;
   text-align: right;
@@ -438,20 +523,21 @@
   display: flex;
   justify-content: space-between;
   color: rgba(0, 0, 0, 0.5);
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
   font-size: 10px;
   line-height: 16px;
   opacity: var(--chart-axis-opacity, 1);
 }
 
 .media-gallery {
-  margin: 33px -20px 0;
+  margin: 42px -20px 0;
   display: grid;
   gap: 1px;
   background: #ffffff;
 }
 
 .media-gallery-item {
-  scroll-margin-top: 196px;
+  scroll-margin-top: 186px;
 }
 
 .media-gallery img,
@@ -490,32 +576,59 @@
   line-height: 22px;
 }
 
-@media (max-width: 360px) {
-  .list-screen {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .dive-log-item {
-    grid-template-columns: 96px minmax(0, 1fr) 16px;
-    gap: 12px;
-  }
-
-  .mosaic {
-    width: 96px;
-    height: 68px;
-  }
-
-  .stats-grid {
-    column-gap: 20px;
-  }
-
-  .stat-value {
-    font-size: 25px;
-  }
+.surface-time-intro {
+  margin-top: 24px;
 }
 
-@media (min-width: 431px) {
+.surface-time-intro h1 {
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 400;
+}
+
+.surface-time-date {
+  margin: 10px 0 0;
+  color: #000000;
+  font-family: "Pangram Sans", "Spoqa Han Sans Neo", sans-serif;
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: 0;
+}
+
+.surface-time-gallery {
+  margin: 42px -20px 0;
+  display: grid;
+  gap: 0;
+  background: #ffffff;
+}
+
+.surface-time-gallery-item {
+  position: relative;
+}
+
+.surface-time-gallery img,
+.surface-time-gallery video {
+  width: 100%;
+  display: block;
+  object-fit: cover;
+  background: #e9ecef;
+}
+
+.surface-time-gallery video {
+  max-height: none;
+}
+
+.surface-time-video-badge {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+}
+
+@media (min-width: 391px) {
   .phone-shell {
     min-height: calc(100svh - 48px);
     max-height: calc(100svh - 48px);
