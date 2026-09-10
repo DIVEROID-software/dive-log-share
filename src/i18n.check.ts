@@ -1,6 +1,8 @@
 import {
   formatShareDetailTitle,
+  formatShareListHeroLines,
   formatShareListTitle,
+  formatShareOwnerLabel,
   resolveShareLocale,
   SHARE_COPY,
 } from './i18n.ts'
@@ -55,5 +57,14 @@ const surface = {
 }
 assertEqual(formatShareListTitle(surface, SHARE_COPY.ko), '휴식 시간')
 assertEqual(formatShareDetailTitle(surface, SHARE_COPY.en), 'Surface Time')
+
+assertEqual(formatShareListHeroLines('', SHARE_COPY.en).line2, 'Shared Dive Log')
+assertEqual(formatShareListHeroLines('Dabin', SHARE_COPY.en).line1, 'Take a look at')
+assertEqual(formatShareListHeroLines('Dabin', SHARE_COPY.en).line2, "Dabin's Dive Log")
+assertEqual(formatShareOwnerLabel('Dabin', SHARE_COPY.en), "Dabin's Log")
+assertEqual(formatShareListHeroLines('다빈', SHARE_COPY.ko).line1, '다빈님이 공유한')
+assertEqual(formatShareListHeroLines('다빈', SHARE_COPY.ko).line2, '다이빙 로그예요.')
+assertEqual(formatShareOwnerLabel('다빈', SHARE_COPY.ko), '다빈님의 로그')
+assertEqual(formatShareOwnerLabel('', SHARE_COPY.ko), '공유 로그')
 
 console.log('i18n check ok')

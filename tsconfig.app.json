@@ -22,5 +22,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/i18n.check.ts"]
+  "exclude": ["src/i18n.check.ts", "src/shareOrder.check.ts"]
 }

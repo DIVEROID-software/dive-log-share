@@ -3,7 +3,10 @@ export type ShareLocale = 'en' | 'ko'
 export interface ShareCopy {
   listHeroLine1: string
   listHeroLine2: string
+  listHeroLine1Named: string
+  listHeroLine2Named: string
   sharedLogLabel: string
+  sharedLogLabelNamed: string
   scubaShort: string
   freeShort: string
   scubaDetail: string
@@ -43,7 +46,10 @@ export const SHARE_COPY: Record<ShareLocale, ShareCopy> = {
   en: {
     listHeroLine1: 'Take a look at',
     listHeroLine2: 'Shared Dive Log',
+    listHeroLine1Named: 'Take a look at',
+    listHeroLine2Named: "{name}'s Dive Log",
     sharedLogLabel: 'Shared Log',
+    sharedLogLabelNamed: "{name}'s Log",
     scubaShort: 'Scuba',
     freeShort: 'Free',
     scubaDetail: 'Scuba Diving',
@@ -74,7 +80,10 @@ export const SHARE_COPY: Record<ShareLocale, ShareCopy> = {
   ko: {
     listHeroLine1: '공유된',
     listHeroLine2: '다이빙 로그예요.',
+    listHeroLine1Named: '{name}님이 공유한',
+    listHeroLine2Named: '다이빙 로그예요.',
     sharedLogLabel: '공유 로그',
+    sharedLogLabelNamed: '{name}님의 로그',
     scubaShort: '스쿠버',
     freeShort: '프리',
     scubaDetail: '스쿠버 다이빙',
@@ -129,6 +138,32 @@ export function detectShareLocale(): ShareLocale {
     ...(navigator.languages ?? []),
     navigator.language,
   ])
+}
+
+export function formatShareListHeroLines(
+  senderName: string,
+  copy: ShareCopy,
+): { line1: string; line2: string } {
+  const name: string = senderName.trim()
+  if (!name) {
+    return { line1: copy.listHeroLine1, line2: copy.listHeroLine2 }
+  }
+  return {
+    line1: applyShareName(copy.listHeroLine1Named, name),
+    line2: applyShareName(copy.listHeroLine2Named, name),
+  }
+}
+
+export function formatShareOwnerLabel(senderName: string, copy: ShareCopy): string {
+  const name: string = senderName.trim()
+  if (!name) {
+    return copy.sharedLogLabel
+  }
+  return applyShareName(copy.sharedLogLabelNamed, name)
+}
+
+function applyShareName(template: string, name: string): string {
+  return template.replaceAll('{name}', name)
 }
 
 export function formatSurfaceTimeTitle(tabTitle: string, copy: ShareCopy): string {

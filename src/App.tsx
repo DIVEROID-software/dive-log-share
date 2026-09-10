@@ -14,11 +14,14 @@ import './App.css'
 import {
   detectShareLocale,
   formatShareDetailTitle,
+  formatShareListHeroLines,
   formatShareListTitle,
+  formatShareOwnerLabel,
   formatSurfaceTimeTitle,
   SHARE_COPY,
   type ShareCopy,
 } from './i18n.ts'
+import { orderedShareDiveLogs, shareLogClientKey } from './shareOrder.ts'
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ?? 'https://supabase.diveroid.shop'
@@ -35,6 +38,7 @@ interface DiveLogShareManifest {
   shareUrl: string
   createdAt: string
   allowDownload: boolean
+  senderDisplayName: string
   diveLogIds: string[]
   diveLogs: DiveLogShareManifestDiveLog[]
   warnings: string[]
@@ -199,11 +203,7 @@ function ShareApp() {
     ) {
       return null
     }
-    return (
-      loadState.manifest.diveLogs.find(
-        (diveLog) => diveLog.diveLogId === route.selectedLogId,
-      ) ?? null
-    )
+    return findShareDiveLog(loadState.manifest.diveLogs, route.selectedLogId)
   }, [loadState, route.shareId, route.selectedLogId])
 
   const openDiveLog = (diveLogId: string) => {
@@ -234,15 +234,17 @@ function ShareApp() {
           (selectedDiveLog ? (
             isSurfaceTimeLog(selectedDiveLog) ? (
               <SurfaceTimeDetailScreen
-                key={selectedDiveLog.diveLogId}
+                key={shareLogClientKey(selectedDiveLog)}
                 diveLog={selectedDiveLog}
+                senderDisplayName={loadState.manifest.senderDisplayName}
                 showBackButton={route.shareType !== 'single'}
                 onBack={closeDiveLog}
               />
             ) : (
               <DiveLogDetailScreen
-                key={selectedDiveLog.diveLogId}
+                key={shareLogClientKey(selectedDiveLog)}
                 diveLog={selectedDiveLog}
+                senderDisplayName={loadState.manifest.senderDisplayName}
                 showBackButton={route.shareType !== 'single'}
                 onBack={closeDiveLog}
               />
@@ -266,13 +268,14 @@ function DiveLogListScreen({
   onOpenDiveLog: (diveLogId: string) => void
 }) {
   const copy = useShareCopy()
+  const heroLines = formatShareListHeroLines(manifest.senderDisplayName, copy)
   return (
     <div className="screen list-screen">
       <header className="list-hero">
         <DiveroidLogo />
         <h1>
-          <span>{copy.listHeroLine1}</span>
-          <span>{copy.listHeroLine2}</span>
+          <span>{heroLines.line1}</span>
+          <span>{heroLines.line2}</span>
         </h1>
       </header>
 
@@ -281,11 +284,11 @@ function DiveLogListScreen({
       ) : (
         <ol className="dive-log-list">
           {manifest.diveLogs.map((diveLog) => (
-            <li key={diveLog.diveLogId}>
+            <li key={shareLogClientKey(diveLog)}>
               <button
                 type="button"
                 className="dive-log-item"
-                onClick={() => onOpenDiveLog(diveLog.diveLogId)}
+                onClick={() => onOpenDiveLog(shareLogClientKey(diveLog))}
               >
                 <MediaMosaic media={diveLog.media} title={listTitle(diveLog, copy)} />
                 <span className="item-copy">
@@ -311,10 +314,12 @@ function DiveLogListScreen({
 
 function SurfaceTimeDetailScreen({
   diveLog,
+  senderDisplayName,
   showBackButton,
   onBack,
 }: {
   diveLog: DiveLogShareManifestDiveLog
+  senderDisplayName: string
   showBackButton: boolean
   onBack: () => void
 }) {
@@ -330,7 +335,7 @@ function SurfaceTimeDetailScreen({
       </header>
 
       <section className="detail-intro surface-time-intro">
-        <p className="owner-label">{copy.sharedLogLabel}</p>
+        <p className="owner-label">{formatShareOwnerLabel(senderDisplayName, copy)}</p>
         <h1>{surfaceTimeTitle(diveLog, copy)}</h1>
         <p className="surface-time-date">{fallbackText(diveLog.dateText, copy.dateUnknown)}</p>
       </section>
@@ -382,10 +387,12 @@ function SurfaceTimeMediaGallery({ media }: { media: DiveLogShareManifestMedia[]
 
 function DiveLogDetailScreen({
   diveLog,
+  senderDisplayName,
   showBackButton,
   onBack,
 }: {
   diveLog: DiveLogShareManifestDiveLog
+  senderDisplayName: string
   showBackButton: boolean
   onBack: () => void
 }) {
@@ -558,7 +565,7 @@ function DiveLogDetailScreen({
       </header>
 
       <section className="detail-intro">
-        <p className="owner-label">{copy.sharedLogLabel}</p>
+        <p className="owner-label">{formatShareOwnerLabel(senderDisplayName, copy)}</p>
         <h1>{detailTitle(diveLog, copy)}</h1>
         <div className="detail-meta">
           <span className="detail-meta-date">
@@ -1150,16 +1157,30 @@ function assetUrl(path: string): string {
   return `${STORAGE_BASE_URL}/${cleanPath.split('/').map(encodeURIComponent).join('/')}`
 }
 
+function findShareDiveLog(
+  diveLogs: DiveLogShareManifestDiveLog[],
+  selectedLogId: string,
+): DiveLogShareManifestDiveLog | null {
+  const exactMatch: DiveLogShareManifestDiveLog | undefined = diveLogs.find(
+    (diveLog) => shareLogClientKey(diveLog) === selectedLogId,
+  )
+  if (exactMatch) {
+    return exactMatch
+  }
+  return diveLogs.find((diveLog) => diveLog.diveLogId === selectedLogId) ?? null
+}
+
 function normalizeManifest(payload: unknown, fallbackShareId: string): DiveLogShareManifest {
   const manifest = isRecord(payload) ? payload : {}
-  const diveLogs = readArray(manifest.diveLogs).map(normalizeDiveLog)
+  const diveLogs = orderedShareDiveLogs(readArray(manifest.diveLogs).map(normalizeDiveLog))
   return {
     schemaVersion: readNumber(manifest.schemaVersion, 1),
     shareId: readString(manifest.shareId, fallbackShareId),
     shareUrl: readString(manifest.shareUrl, ''),
     createdAt: readString(manifest.createdAt, ''),
     allowDownload: readBoolean(manifest.allowDownload, false),
-    diveLogIds: readArray(manifest.diveLogIds).map((item) => readString(item, '')),
+    senderDisplayName: readString(manifest.senderDisplayName, ''),
+    diveLogIds: diveLogs.map((diveLog) => shareLogClientKey(diveLog)),
     diveLogs,
     warnings: readArray(manifest.warnings).map((item) => readString(item, '')),
   }
