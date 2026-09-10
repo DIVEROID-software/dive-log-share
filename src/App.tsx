@@ -1,13 +1,24 @@
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react'
 import './App.css'
+import {
+  detectShareLocale,
+  formatShareDetailTitle,
+  formatShareListTitle,
+  formatSurfaceTimeTitle,
+  SHARE_COPY,
+  type ShareCopy,
+} from './i18n.ts'
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ?? 'https://supabase.diveroid.shop'
@@ -35,6 +46,8 @@ interface DiveLogShareManifestDiveLog {
   diveDisplayIndex: number
   isFreeDiving: boolean
   isSurfaceTime: boolean
+  /** 1-based free-dive trip index; 0 when the share is a whole session / scuba. */
+  freeTripNumber: number
   dateText: string
   locationText: string
   stats: DiveLogShareManifestStats | null
@@ -84,7 +97,34 @@ interface MediaMarker {
 type LoadState =
   | { status: 'idle' }
   | { status: 'success'; shareId: string; manifest: DiveLogShareManifest }
-  | { status: 'error'; shareId: string; message: string }
+  | { status: 'error'; shareId: string }
+
+const ShareCopyContext = createContext<ShareCopy>(SHARE_COPY.en)
+
+function ShareCopyProvider({ children }: { children: ReactNode }) {
+  const [copy, setCopy] = useState<ShareCopy>(() => SHARE_COPY[detectShareLocale()])
+
+  useEffect(() => {
+    const sync = (): void => {
+      const locale = detectShareLocale()
+      setCopy(SHARE_COPY[locale])
+      document.documentElement.lang = locale
+    }
+    sync()
+    window.addEventListener('languagechange', sync)
+    window.addEventListener('popstate', sync)
+    return () => {
+      window.removeEventListener('languagechange', sync)
+      window.removeEventListener('popstate', sync)
+    }
+  }, [])
+
+  return <ShareCopyContext.Provider value={copy}>{children}</ShareCopyContext.Provider>
+}
+
+function useShareCopy(): ShareCopy {
+  return useContext(ShareCopyContext)
+}
 
 interface RouteState {
   shareId: string
@@ -98,6 +138,15 @@ interface ChartPoint {
 }
 
 function App() {
+  return (
+    <ShareCopyProvider>
+      <ShareApp />
+    </ShareCopyProvider>
+  )
+}
+
+function ShareApp() {
+  const copy = useShareCopy()
   const [route, setRoute] = useState<RouteState>(() => readRouteState())
   const [loadState, setLoadState] = useState<LoadState>({ status: 'idle' })
 
@@ -136,7 +185,6 @@ function App() {
         setLoadState({
           status: 'error',
           shareId,
-          message: 'Dive log share could not be loaded.',
         })
       })
 
@@ -171,15 +219,15 @@ function App() {
   return (
     <main className="share-page">
       <section className="phone-shell" aria-live="polite">
-        {!route.shareId && <CenteredState label="Share link is missing." />}
+        {!route.shareId && <CenteredState label={copy.missingLink} />}
         {route.shareId &&
           loadState.status !== 'success' &&
           (loadState.status !== 'error' || loadState.shareId !== route.shareId) && (
-            <CenteredState label="Loading dive log..." />
+            <CenteredState label={copy.loading} />
           )}
         {route.shareId &&
           loadState.status === 'error' &&
-          loadState.shareId === route.shareId && <CenteredState label={loadState.message} />}
+          loadState.shareId === route.shareId && <CenteredState label={copy.loadError} />}
         {route.shareId &&
           loadState.status === 'success' &&
           loadState.shareId === route.shareId &&
@@ -217,18 +265,19 @@ function DiveLogListScreen({
   manifest: DiveLogShareManifest
   onOpenDiveLog: (diveLogId: string) => void
 }) {
+  const copy = useShareCopy()
   return (
     <div className="screen list-screen">
       <header className="list-hero">
         <DiveroidLogo />
         <h1>
-          <span>Take a look at</span>
-          <span>Shared Dive Log</span>
+          <span>{copy.listHeroLine1}</span>
+          <span>{copy.listHeroLine2}</span>
         </h1>
       </header>
 
       {manifest.diveLogs.length === 0 ? (
-        <CenteredState label="No shared dive logs." compact />
+        <CenteredState label={copy.emptyLogs} compact />
       ) : (
         <ol className="dive-log-list">
           {manifest.diveLogs.map((diveLog) => (
@@ -238,10 +287,10 @@ function DiveLogListScreen({
                 className="dive-log-item"
                 onClick={() => onOpenDiveLog(diveLog.diveLogId)}
               >
-                <MediaMosaic media={diveLog.media} title={listTitle(diveLog)} />
+                <MediaMosaic media={diveLog.media} title={listTitle(diveLog, copy)} />
                 <span className="item-copy">
-                  <span className="item-date">{fallbackText(diveLog.dateText, 'Date unknown')}</span>
-                  <span className="item-title">{listTitle(diveLog)}</span>
+                  <span className="item-date">{fallbackText(diveLog.dateText, copy.dateUnknown)}</span>
+                  <span className="item-title">{listTitle(diveLog, copy)}</span>
                   <ListLocation locationText={diveLog.locationText} />
                 </span>
                 <FigmaIcon
@@ -269,20 +318,21 @@ function SurfaceTimeDetailScreen({
   showBackButton: boolean
   onBack: () => void
 }) {
+  const copy = useShareCopy()
   return (
     <article className="screen detail-screen surface-time-screen">
       <header className="detail-app-bar">
         {showBackButton && (
-          <button type="button" className="icon-button" onClick={onBack} aria-label="Back to list">
+          <button type="button" className="icon-button" onClick={onBack} aria-label={copy.backToList}>
             <FigmaIcon name="ic_l_back_24" className="back-icon" />
           </button>
         )}
       </header>
 
       <section className="detail-intro surface-time-intro">
-        <p className="owner-label">Shared Log</p>
-        <h1>{surfaceTimeTitle(diveLog)}</h1>
-        <p className="surface-time-date">{fallbackText(diveLog.dateText, 'Date unknown')}</p>
+        <p className="owner-label">{copy.sharedLogLabel}</p>
+        <h1>{surfaceTimeTitle(diveLog, copy)}</h1>
+        <p className="surface-time-date">{fallbackText(diveLog.dateText, copy.dateUnknown)}</p>
       </section>
 
       <SurfaceTimeMediaGallery media={diveLog.media} />
@@ -292,12 +342,13 @@ function SurfaceTimeDetailScreen({
 }
 
 function SurfaceTimeMediaGallery({ media }: { media: DiveLogShareManifestMedia[] }) {
+  const copy = useShareCopy()
   if (media.length === 0) {
     return null
   }
 
   return (
-    <section className="surface-time-gallery" aria-label="Shared media">
+    <section className="surface-time-gallery" aria-label={copy.sharedMedia}>
       {media.map((item) => {
         const mediaUrl = assetUrl(item.filePath)
         const posterUrl = item.posterPath ? assetUrl(item.posterPath) : undefined
@@ -320,7 +371,7 @@ function SurfaceTimeMediaGallery({ media }: { media: DiveLogShareManifestMedia[]
                 />
               </>
             ) : (
-              <img src={mediaUrl} alt={item.originalName || 'Dive media'} />
+              <img src={mediaUrl} alt={item.originalName || copy.diveMedia} />
             )}
           </div>
         )
@@ -338,6 +389,7 @@ function DiveLogDetailScreen({
   showBackButton: boolean
   onBack: () => void
 }) {
+  const copy = useShareCopy()
   const points = useMemo(() => chartPoints(diveLog.chart), [diveLog.chart])
   const mediaMarkers = useMemo(
     () => buildMediaMarkers(diveLog.media, points),
@@ -499,21 +551,21 @@ function DiveLogDetailScreen({
     <article ref={detailScreenRef} className="screen detail-screen">
       <header className="detail-app-bar">
         {showBackButton && (
-          <button type="button" className="icon-button" onClick={onBack} aria-label="Back to list">
+          <button type="button" className="icon-button" onClick={onBack} aria-label={copy.backToList}>
             <FigmaIcon name="ic_l_back_24" className="back-icon" />
           </button>
         )}
       </header>
 
       <section className="detail-intro">
-        <p className="owner-label">Shared Log</p>
-        <h1>{detailTitle(diveLog)}</h1>
+        <p className="owner-label">{copy.sharedLogLabel}</p>
+        <h1>{detailTitle(diveLog, copy)}</h1>
         <div className="detail-meta">
           <span className="detail-meta-date">
-            {fallbackText(diveLog.dateText, 'Date unknown')}
+            {fallbackText(diveLog.dateText, copy.dateUnknown)}
           </span>
           <span className="detail-meta-location">
-            {fallbackText(diveLog.locationText, 'Location unknown')}
+            {fallbackText(diveLog.locationText, copy.locationUnknown)}
           </span>
         </div>
       </section>
@@ -554,20 +606,21 @@ function StatsGrid({
   stats: DiveLogShareManifestStats | null
   isFreeDiving: boolean
 }) {
-  const temperatureLabel = isFreeDiving ? 'Surface Temp' : 'Bottom Temp'
+  const copy = useShareCopy()
+  const temperatureLabel = isFreeDiving ? copy.surfaceTemp : copy.bottomTemp
   const temperatureValue = isFreeDiving ? stats?.surfaceTemp : stats?.bottomTemp
 
   return (
-    <section className="stats-grid" aria-label="Dive statistics">
+    <section className="stats-grid" aria-label={copy.diveStatistics}>
       <StatItem
         icon={<FigmaIcon name="ic_l_max_depth_24" />}
-        label="Max Depth"
+        label={copy.maxDepth}
         value={formatNumber(stats?.maxDepth)}
         unit="m"
       />
       <StatItem
         icon={<FigmaIcon name="ic_l_diving_time_24" />}
-        label="Dive Time"
+        label={copy.diveTime}
         value={formatNumber(stats?.diveTime)}
         unit="min"
       />
@@ -608,11 +661,12 @@ function StatItem({
 }
 
 function GasTypeStatItem({ gasType }: { gasType: string | undefined }) {
+  const copy = useShareCopy()
   const parts = parseGasTypeParts(gasType)
 
   return (
     <div className="stat-item">
-      <p>Gas Type</p>
+      <p>{copy.gasType}</p>
       <div className="stat-value">
         <FigmaIcon name="ic_l_air_24" />
         {parts ? (
@@ -648,6 +702,7 @@ function DiveProfileChart({
   onSelectPoint: (pointIndex: number, nearbyMediaIndex: number | null) => void
   onTouchingChange: (isTouching: boolean) => void
 }) {
+  const copy = useShareCopy()
   const svgRef = useRef<SVGSVGElement | null>(null)
   const lastMediaIndexRef = useRef(-1)
   const hasChart = points.length >= 2
@@ -763,14 +818,14 @@ function DiveProfileChart({
   return (
     <section
       className="profile-card"
-      aria-label="Dive profile chart"
+      aria-label={copy.diveProfileChart}
       style={{ ['--chart-axis-opacity' as string]: axisOpacity.toFixed(3) }}
     >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${CHART_VIEW_WIDTH} ${CHART_VIEW_HEIGHT}`}
         role="img"
-        aria-label="Dive profile. Drag to scrub through media."
+        aria-label={copy.diveProfileScrub}
       >
         <defs>
           <linearGradient id="profile-fill" x1="0" x2="0" y1="0" y2="1">
@@ -893,6 +948,7 @@ function MediaGallery({
   itemRefs: MutableRefObject<Array<HTMLElement | null>>
   onActiveMediaChange: (mediaIndex: number) => void
 }) {
+  const copy = useShareCopy()
   const galleryRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -943,7 +999,7 @@ function MediaGallery({
   }
 
   return (
-    <section ref={galleryRef} className="media-gallery" aria-label="Shared media">
+    <section ref={galleryRef} className="media-gallery" aria-label={copy.sharedMedia}>
       {media.map((item, index) => {
         const mediaUrl = assetUrl(item.filePath)
         const posterUrl = item.posterPath ? assetUrl(item.posterPath) : undefined
@@ -966,7 +1022,7 @@ function MediaGallery({
                 preload="metadata"
               />
             ) : (
-              <img src={mediaUrl} alt={item.originalName || 'Dive media'} />
+              <img src={mediaUrl} alt={item.originalName || copy.diveMedia} />
             )}
           </div>
         )
@@ -1009,13 +1065,14 @@ function MediaMosaic({
 }
 
 function DownloadBanner() {
+  const copy = useShareCopy()
   return (
     <a className="download-banner" href={DOWNLOAD_URL} target="_blank" rel="noreferrer">
       <span className="download-brand">
         <LogoMark />
-        <span>Enjoy diving with DIVEROID!</span>
+        <span>{copy.enjoyDiving}</span>
       </span>
-      <span className="download-button">Download</span>
+      <span className="download-button">{copy.download}</span>
     </a>
   )
 }
@@ -1117,6 +1174,7 @@ function normalizeDiveLog(payload: unknown): DiveLogShareManifestDiveLog {
     isFreeDiving: readBoolean(diveLog.isFreeDiving, false),
     isSurfaceTime:
       readBoolean(diveLog.isSurfaceTime, false) || inferIsSurfaceTime(diveLog),
+    freeTripNumber: readNumber(diveLog.freeTripNumber, 0),
     dateText: readString(diveLog.dateText, ''),
     locationText: readString(diveLog.locationText, ''),
     stats: normalizeStats(diveLog.stats),
@@ -1212,11 +1270,30 @@ function chartPoints(chart: DiveLogShareManifestChart | null): ChartPoint[] {
   if (!chart) {
     return []
   }
-  const pointCount = Math.min(chart.xValues.length, chart.yValues.length)
+  const series = visibleChartSeries(chart)
+  const pointCount = Math.min(series.xValues.length, series.yValues.length)
   return Array.from({ length: pointCount }, (_, index) => ({
-    x: chart.xValues[index],
-    y: Math.abs(chart.yValues[index]),
+    x: series.xValues[index],
+    y: Math.abs(series.yValues[index]),
   })).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+}
+
+/**
+ * Free-dive trip shares plot the trip series when the app sends it; otherwise
+ * the primary x/y series (already trip-only on newer manifests).
+ */
+function visibleChartSeries(chart: DiveLogShareManifestChart): {
+  xValues: number[]
+  yValues: number[]
+} {
+  const tripCount = Math.min(chart.tripXValues.length, chart.tripYValues.length)
+  if (tripCount > 0) {
+    return {
+      xValues: chart.tripXValues.slice(0, tripCount),
+      yValues: chart.tripYValues.slice(0, tripCount),
+    }
+  }
+  return { xValues: chart.xValues, yValues: chart.yValues }
 }
 
 function buildMediaMarkers(
@@ -1468,35 +1545,46 @@ function formatTimeLabel(totalSeconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, '0')}`
 }
 
-function listTitle(diveLog: DiveLogShareManifestDiveLog): string {
-  if (diveLog.tabTitle.trim()) {
-    return diveLog.tabTitle.trim()
+function recordNumberLabel(diveLog: DiveLogShareManifestDiveLog): string {
+  const index = diveLog.diveDisplayIndex
+  if (index <= 0) {
+    return ''
   }
-  const prefix = diveLog.isFreeDiving ? 'Free' : 'Scuba'
-  const index = diveLog.diveDisplayIndex > 0 ? diveLog.diveDisplayIndex : ''
-  return index ? `${prefix} #${index}` : `${prefix} Dive`
+  if (diveLog.isFreeDiving && diveLog.freeTripNumber > 0) {
+    return `${index}-${diveLog.freeTripNumber}`
+  }
+  return `${index}`
 }
 
-function detailTitle(diveLog: DiveLogShareManifestDiveLog): string {
-  if (isSurfaceTimeLog(diveLog)) {
-    return surfaceTimeTitle(diveLog)
-  }
-  const title = listTitle(diveLog)
-  if (title.startsWith('Scuba #')) {
-    return title.replace('Scuba #', 'Scuba Diving #')
-  }
-  if (title.startsWith('Free #')) {
-    return title.replace('Free #', 'Free Diving #')
-  }
-  return title
+function listTitle(
+  diveLog: DiveLogShareManifestDiveLog,
+  copy: ShareCopy = SHARE_COPY.en,
+): string {
+  return formatShareListTitle(
+    {
+      isSurfaceTime: diveLog.isSurfaceTime,
+      isFreeDiving: diveLog.isFreeDiving,
+      recordLabel: recordNumberLabel(diveLog),
+      tabTitle: diveLog.tabTitle,
+    },
+    copy,
+  )
 }
 
-function surfaceTimeTitle(diveLog: DiveLogShareManifestDiveLog): string {
-  const title = listTitle(diveLog)
-  if (/^surface time(\s+\d+)?$/i.test(title)) {
-    return 'Surface Time'
-  }
-  return title
+function detailTitle(diveLog: DiveLogShareManifestDiveLog, copy: ShareCopy): string {
+  return formatShareDetailTitle(
+    {
+      isSurfaceTime: isSurfaceTimeLog(diveLog),
+      isFreeDiving: diveLog.isFreeDiving,
+      recordLabel: recordNumberLabel(diveLog),
+      tabTitle: diveLog.tabTitle,
+    },
+    copy,
+  )
+}
+
+function surfaceTimeTitle(diveLog: DiveLogShareManifestDiveLog, copy: ShareCopy): string {
+  return formatSurfaceTimeTitle(diveLog.tabTitle, copy)
 }
 
 function isSurfaceTimeLog(diveLog: DiveLogShareManifestDiveLog): boolean {
@@ -1549,7 +1637,10 @@ function inferIsSurfaceTime(diveLog: Record<string, unknown>): boolean {
   return tabTitle === 'surface time' || /^surface time \d+$/.test(tabTitle)
 }
 
-function listLocationParts(locationText: string): [string] | [string, string] {
+function listLocationParts(
+  locationText: string,
+  unknownLabel: string,
+): [string] | [string, string] {
   const normalized = locationText.replace(/\s+\|\s+/g, ', ')
   const parts = normalized
     .split(',')
@@ -1561,11 +1652,12 @@ function listLocationParts(locationText: string): [string] | [string, string] {
   if (parts.length === 1) {
     return [parts[0]]
   }
-  return ['Location unknown']
+  return [unknownLabel]
 }
 
 function ListLocation({ locationText }: { locationText: string }) {
-  const parts = listLocationParts(locationText)
+  const copy = useShareCopy()
+  const parts = listLocationParts(locationText, copy.locationUnknown)
   return (
     <span className="item-location">
       <span>{parts[0]}</span>
