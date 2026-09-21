@@ -33,6 +33,8 @@ export interface ShareCopy {
   diveStatistics: string
   diveProfileChart: string
   diveProfileScrub: string
+  playVideo: string
+  pauseVideo: string
 }
 
 export interface ShareTitleInput {
@@ -76,6 +78,8 @@ export const SHARE_COPY: Record<ShareLocale, ShareCopy> = {
     diveStatistics: 'Dive statistics',
     diveProfileChart: 'Dive profile chart',
     diveProfileScrub: 'Dive profile. Drag to scrub through media.',
+    playVideo: 'Play video',
+    pauseVideo: 'Pause video',
   },
   ko: {
     listHeroLine1: '공유된',
@@ -110,6 +114,8 @@ export const SHARE_COPY: Record<ShareLocale, ShareCopy> = {
     diveStatistics: '다이빙 데이터',
     diveProfileChart: '다이브 프로파일',
     diveProfileScrub: '다이브 프로파일. 드래그하면 미디어를 볼 수 있어요.',
+    playVideo: '동영상 재생',
+    pauseVideo: '동영상 일시정지',
   },
 }
 
@@ -140,11 +146,25 @@ export function detectShareLocale(): ShareLocale {
   ])
 }
 
+export function resolveShareSenderName(userName: string, email: string = ''): string {
+  const trimmedName: string = userName.trim()
+  if (trimmedName && !trimmedName.includes('@')) {
+    return trimmedName
+  }
+  const emailValue: string = (trimmedName.includes('@') ? trimmedName : email).trim()
+  const atIndex: number = emailValue.indexOf('@')
+  if (atIndex <= 0) {
+    return ''
+  }
+  return emailValue.slice(0, atIndex)
+}
+
 export function formatShareListHeroLines(
   senderName: string,
   copy: ShareCopy,
+  email: string = '',
 ): { line1: string; line2: string } {
-  const name: string = senderName.trim()
+  const name: string = resolveShareSenderName(senderName, email)
   if (!name) {
     return { line1: copy.listHeroLine1, line2: copy.listHeroLine2 }
   }
@@ -154,8 +174,12 @@ export function formatShareListHeroLines(
   }
 }
 
-export function formatShareOwnerLabel(senderName: string, copy: ShareCopy): string {
-  const name: string = senderName.trim()
+export function formatShareOwnerLabel(
+  senderName: string,
+  copy: ShareCopy,
+  email: string = '',
+): string {
+  const name: string = resolveShareSenderName(senderName, email)
   if (!name) {
     return copy.sharedLogLabel
   }
