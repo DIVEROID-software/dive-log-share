@@ -551,6 +551,26 @@
   background: #e9ecef;
 }
 
+.share-video {
+  position: relative;
+}
+
+.share-video-badge {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+}
+
+/* Native Chromium controls sit mid-frame when the video uses object-fit: cover. */
+.share-video video::-webkit-media-controls,
+.share-video video::-webkit-media-controls-enclosure,
+.share-video video::-webkit-media-controls-panel {
+  display: none !important;
+}
+
 .centered-state {
   min-height: 100svh;
   padding: 40px 28px;
@@ -619,15 +639,6 @@
 
 .surface-time-gallery video {
   max-height: none;
-}
-
-.surface-time-video-badge {
-  position: absolute;
-  left: 20px;
-  bottom: 20px;
-  width: 32px;
-  height: 32px;
-  pointer-events: none;
 }
 
 @media (min-width: 391px) {

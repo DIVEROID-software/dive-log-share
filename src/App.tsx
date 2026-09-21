@@ -18,6 +18,7 @@ import {
   formatShareListTitle,
   formatShareOwnerLabel,
   formatSurfaceTimeTitle,
+  resolveShareSenderName,
   SHARE_COPY,
   type ShareCopy,
 } from './i18n.ts'
@@ -39,6 +40,7 @@ interface DiveLogShareManifest {
   createdAt: string
   allowDownload: boolean
   senderDisplayName: string
+  senderEmail: string
   diveLogIds: string[]
   diveLogs: DiveLogShareManifestDiveLog[]
   warnings: string[]
@@ -237,6 +239,7 @@ function ShareApp() {
                 key={shareLogClientKey(selectedDiveLog)}
                 diveLog={selectedDiveLog}
                 senderDisplayName={loadState.manifest.senderDisplayName}
+                senderEmail={loadState.manifest.senderEmail}
                 showBackButton={route.shareType !== 'single'}
                 onBack={closeDiveLog}
               />
@@ -245,6 +248,7 @@ function ShareApp() {
                 key={shareLogClientKey(selectedDiveLog)}
                 diveLog={selectedDiveLog}
                 senderDisplayName={loadState.manifest.senderDisplayName}
+                senderEmail={loadState.manifest.senderEmail}
                 showBackButton={route.shareType !== 'single'}
                 onBack={closeDiveLog}
               />
@@ -268,7 +272,11 @@ function DiveLogListScreen({
   onOpenDiveLog: (diveLogId: string) => void
 }) {
   const copy = useShareCopy()
-  const heroLines = formatShareListHeroLines(manifest.senderDisplayName, copy)
+  const heroLines = formatShareListHeroLines(
+    manifest.senderDisplayName,
+    copy,
+    manifest.senderEmail,
+  )
   return (
     <div className="screen list-screen">
       <header className="list-hero">
@@ -315,11 +323,13 @@ function DiveLogListScreen({
 function SurfaceTimeDetailScreen({
   diveLog,
   senderDisplayName,
+  senderEmail,
   showBackButton,
   onBack,
 }: {
   diveLog: DiveLogShareManifestDiveLog
   senderDisplayName: string
+  senderEmail: string
   showBackButton: boolean
   onBack: () => void
 }) {
@@ -335,7 +345,7 @@ function SurfaceTimeDetailScreen({
       </header>
 
       <section className="detail-intro surface-time-intro">
-        <p className="owner-label">{formatShareOwnerLabel(senderDisplayName, copy)}</p>
+        <p className="owner-label">{formatShareOwnerLabel(senderDisplayName, copy, senderEmail)}</p>
         <h1>{surfaceTimeTitle(diveLog, copy)}</h1>
         <p className="surface-time-date">{fallbackText(diveLog.dateText, copy.dateUnknown)}</p>
       </section>
@@ -343,6 +353,65 @@ function SurfaceTimeDetailScreen({
       <SurfaceTimeMediaGallery media={diveLog.media} />
       <DownloadBanner />
     </article>
+  )
+}
+
+function pauseOtherShareVideos(current: HTMLVideoElement): void {
+  document.querySelectorAll<HTMLVideoElement>('.share-video video').forEach((video) => {
+    if (video !== current && !video.paused) {
+      video.pause()
+    }
+  })
+}
+
+function ShareVideo({ src, poster }: { src: string; poster?: string }) {
+  const copy = useShareCopy()
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+
+  const togglePlayback = () => {
+    const video = videoRef.current
+    if (!video) {
+      return
+    }
+    if (video.paused) {
+      pauseOtherShareVideos(video)
+      void video.play()
+    } else {
+      video.pause()
+    }
+  }
+
+  return (
+    <div
+      className="share-video"
+      role="button"
+      tabIndex={0}
+      aria-label={isPlaying ? copy.pauseVideo : copy.playVideo}
+      onClick={togglePlayback}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          togglePlayback()
+        }
+      }}
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        poster={poster}
+        playsInline
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => setIsPlaying(false)}
+      />
+      <FigmaIcon
+        name={isPlaying ? 'ic_s_pause_32' : 'ic_s_play_32'}
+        className="share-video-badge"
+        size={32}
+      />
+    </div>
   )
 }
 
@@ -361,20 +430,7 @@ function SurfaceTimeMediaGallery({ media }: { media: DiveLogShareManifestMedia[]
         return (
           <div key={item.filePath} className="surface-time-gallery-item">
             {isVideo ? (
-              <>
-                <video
-                  src={mediaUrl}
-                  poster={posterUrl}
-                  controls
-                  playsInline
-                  preload="metadata"
-                />
-                <FigmaIcon
-                  name="ic_s_pause_32"
-                  className="surface-time-video-badge"
-                  size={32}
-                />
-              </>
+              <ShareVideo src={mediaUrl} poster={posterUrl} />
             ) : (
               <img src={mediaUrl} alt={item.originalName || copy.diveMedia} />
             )}
@@ -388,11 +444,13 @@ function SurfaceTimeMediaGallery({ media }: { media: DiveLogShareManifestMedia[]
 function DiveLogDetailScreen({
   diveLog,
   senderDisplayName,
+  senderEmail,
   showBackButton,
   onBack,
 }: {
   diveLog: DiveLogShareManifestDiveLog
   senderDisplayName: string
+  senderEmail: string
   showBackButton: boolean
   onBack: () => void
 }) {
@@ -565,7 +623,7 @@ function DiveLogDetailScreen({
       </header>
 
       <section className="detail-intro">
-        <p className="owner-label">{formatShareOwnerLabel(senderDisplayName, copy)}</p>
+        <p className="owner-label">{formatShareOwnerLabel(senderDisplayName, copy, senderEmail)}</p>
         <h1>{detailTitle(diveLog, copy)}</h1>
         <div className="detail-meta">
           <span className="detail-meta-date">
@@ -1021,13 +1079,7 @@ function MediaGallery({
             data-media-index={index}
           >
             {item.mediaKind === 'video' ? (
-              <video
-                src={mediaUrl}
-                poster={posterUrl}
-                controls
-                playsInline
-                preload="metadata"
-              />
+              <ShareVideo src={mediaUrl} poster={posterUrl} />
             ) : (
               <img src={mediaUrl} alt={item.originalName || copy.diveMedia} />
             )}
@@ -1179,7 +1231,17 @@ function normalizeManifest(payload: unknown, fallbackShareId: string): DiveLogSh
     shareUrl: readString(manifest.shareUrl, ''),
     createdAt: readString(manifest.createdAt, ''),
     allowDownload: readBoolean(manifest.allowDownload, false),
-    senderDisplayName: readString(manifest.senderDisplayName, ''),
+    senderDisplayName: resolveShareSenderName(
+      firstNonEmptyString(
+        manifest.senderDisplayName,
+        manifest.senderNickname,
+        manifest.userName,
+        manifest.username,
+        manifest.nickname,
+      ),
+      firstNonEmptyString(manifest.senderEmail, manifest.email),
+    ),
+    senderEmail: firstNonEmptyString(manifest.senderEmail, manifest.email),
     diveLogIds: diveLogs.map((diveLog) => shareLogClientKey(diveLog)),
     diveLogs,
     warnings: readArray(manifest.warnings).map((item) => readString(item, '')),
@@ -1255,6 +1317,15 @@ function normalizeMedia(payload: unknown): DiveLogShareManifestMedia {
 
 function readString(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback
+}
+
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+  return ''
 }
 
 function nullableString(value: unknown): string | null {

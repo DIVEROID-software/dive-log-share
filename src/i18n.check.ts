@@ -4,6 +4,7 @@ import {
   formatShareListTitle,
   formatShareOwnerLabel,
   resolveShareLocale,
+  resolveShareSenderName,
   SHARE_COPY,
 } from './i18n.ts'
 
@@ -25,6 +26,8 @@ assertEqual(SHARE_COPY.en.maxDepth, 'Max Depth')
 assertEqual(SHARE_COPY.en.bottomTemp, 'Bottom Temp')
 assertEqual(SHARE_COPY.en.gasType, 'Gas Type')
 assertEqual(SHARE_COPY.en.surfaceTime, 'Surface Time')
+assertEqual(SHARE_COPY.en.playVideo, 'Play video')
+assertEqual(SHARE_COPY.en.pauseVideo, 'Pause video')
 
 assertEqual(SHARE_COPY.ko.listHeroLine2, '다이빙 로그예요.')
 assertEqual(SHARE_COPY.ko.enjoyDiving, '다이브로이드와 함께 다이빙 100배 즐기기!')
@@ -34,6 +37,8 @@ assertEqual(SHARE_COPY.ko.diveTime, '다이빙 시간')
 assertEqual(SHARE_COPY.ko.bottomTemp, '바닥 수온')
 assertEqual(SHARE_COPY.ko.gasType, '기체 유형')
 assertEqual(SHARE_COPY.ko.surfaceTime, '휴식 시간')
+assertEqual(SHARE_COPY.ko.playVideo, '동영상 재생')
+assertEqual(SHARE_COPY.ko.pauseVideo, '동영상 일시정지')
 assertEqual(SHARE_COPY.ko.scubaShort, '스쿠버')
 assertEqual(SHARE_COPY.ko.freeShort, '프리')
 assertEqual(SHARE_COPY.ko.scubaDetail, '스쿠버 다이빙')
@@ -62,9 +67,25 @@ assertEqual(formatShareListHeroLines('', SHARE_COPY.en).line2, 'Shared Dive Log'
 assertEqual(formatShareListHeroLines('Dabin', SHARE_COPY.en).line1, 'Take a look at')
 assertEqual(formatShareListHeroLines('Dabin', SHARE_COPY.en).line2, "Dabin's Dive Log")
 assertEqual(formatShareOwnerLabel('Dabin', SHARE_COPY.en), "Dabin's Log")
+assertEqual(formatShareOwnerLabel('', SHARE_COPY.en), 'Shared Log')
+assertEqual(
+  formatShareListHeroLines('', SHARE_COPY.en, 'dabin@diveroid.com').line2,
+  "dabin's Dive Log",
+)
 assertEqual(formatShareListHeroLines('다빈', SHARE_COPY.ko).line1, '다빈님이 공유한')
 assertEqual(formatShareListHeroLines('다빈', SHARE_COPY.ko).line2, '다이빙 로그예요.')
 assertEqual(formatShareOwnerLabel('다빈', SHARE_COPY.ko), '다빈님의 로그')
 assertEqual(formatShareOwnerLabel('', SHARE_COPY.ko), '공유 로그')
+
+assertEqual(resolveShareSenderName('Dabin', 'abcde@gmail.com'), 'Dabin')
+assertEqual(resolveShareSenderName('  Dabin  ', 'abcde@gmail.com'), 'Dabin')
+assertEqual(resolveShareSenderName('', 'abcde@gmail.com'), 'abcde')
+assertEqual(resolveShareSenderName('   ', 'abcde@gmail.com'), 'abcde')
+assertEqual(resolveShareSenderName('abcde@gmail.com', ''), 'abcde')
+assertEqual(resolveShareSenderName('', 'abcde@gmail.com'), 'abcde')
+assertEqual(resolveShareSenderName('', '@gmail.com'), '')
+assertEqual(resolveShareSenderName('', ''), '')
+assertEqual(formatShareOwnerLabel('', SHARE_COPY.en, 'dabin@diveroid.com'), "dabin's Log")
+assertEqual(formatShareListHeroLines('dabin@diveroid.com', SHARE_COPY.en).line2, "dabin's Dive Log")
 
 console.log('i18n check ok')
