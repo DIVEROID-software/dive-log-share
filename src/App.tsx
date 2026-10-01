@@ -366,8 +366,14 @@ function pauseOtherShareVideos(current: HTMLVideoElement): void {
 
 function ShareVideo({ src, poster }: { src: string; poster?: string }) {
   const copy = useShareCopy()
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+
+  const setPlaying = (playing: boolean) => {
+    rootRef.current?.classList.toggle('is-playing', playing)
+    setIsPlaying(playing)
+  }
 
   const togglePlayback = () => {
     const video = videoRef.current
@@ -376,7 +382,11 @@ function ShareVideo({ src, poster }: { src: string; poster?: string }) {
     }
     if (video.paused) {
       pauseOtherShareVideos(video)
-      void video.play()
+      // Reveal before play(). iOS will not start a display:none video, and
+      // play() has to run inside this tap or Safari blocks it.
+      setPlaying(true)
+      void video.offsetWidth
+      void video.play().catch(() => setPlaying(false))
     } else {
       video.pause()
     }
@@ -384,7 +394,8 @@ function ShareVideo({ src, poster }: { src: string; poster?: string }) {
 
   return (
     <div
-      className="share-video"
+      ref={rootRef}
+      className={isPlaying ? 'share-video is-playing' : 'share-video'}
       role="button"
       tabIndex={0}
       aria-label={isPlaying ? copy.pauseVideo : copy.playVideo}
@@ -396,16 +407,27 @@ function ShareVideo({ src, poster }: { src: string; poster?: string }) {
         }
       }}
     >
+      {/* Keep <video> out of view until play. iOS Safari paints a white native
+          play bar across a visible <video> when object-fit is cover, and
+          ::-webkit-media-controls { display:none } does not remove it. */}
       <video
         ref={videoRef}
+        className="share-video-player"
         src={src}
-        poster={poster}
         playsInline
-        preload="metadata"
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onEnded={() => setIsPlaying(false)}
+        preload="none"
+        controls={false}
+        disablePictureInPicture
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
       />
+      {!isPlaying && poster ? (
+        <img className="share-video-still" src={poster} alt="" />
+      ) : null}
+      {!isPlaying && !poster ? (
+        <span className="share-video-still share-video-still-empty" />
+      ) : null}
       <FigmaIcon
         name={isPlaying ? 'ic_s_pause_32' : 'ic_s_play_32'}
         className="share-video-badge"

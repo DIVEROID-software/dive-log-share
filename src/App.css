@@ -564,11 +564,39 @@
   pointer-events: none;
 }
 
-/* Native Chromium controls sit mid-frame when the video uses object-fit: cover. */
+.share-video-still {
+  width: 100%;
+  object-fit: cover;
+  display: block;
+  background: #e9ecef;
+}
+
+.media-gallery .share-video-still {
+  max-height: 420px;
+}
+
+.share-video-still-empty {
+  min-height: 220px;
+}
+
+/* Idle: remove the video from the render tree. A collapsed video can still
+   paint iOS's native play bar across the poster. */
+.share-video:not(.is-playing) .share-video-player {
+  display: none;
+}
+
+/* Native controls sit mid-frame when the video uses object-fit: cover.
+   iOS ignores the enclosure/panel hide, so also zero the start-playback button. */
 .share-video video::-webkit-media-controls,
 .share-video video::-webkit-media-controls-enclosure,
-.share-video video::-webkit-media-controls-panel {
+.share-video video::-webkit-media-controls-panel,
+.share-video video::-webkit-media-controls-start-playback-button,
+.share-video video::-webkit-media-controls-overlay-play-button {
   display: none !important;
+  -webkit-appearance: none;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .centered-state {
