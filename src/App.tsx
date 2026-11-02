@@ -1,5 +1,6 @@
 import {
   createContext,
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -364,32 +365,163 @@ function pauseOtherShareVideos(current: HTMLVideoElement): void {
   })
 }
 
+/** Cover-crop without object-fit. object-fit: cover on <video> is what pins the native play bar mid-frame. */
+function layoutShareVideo(frame: HTMLElement, video: HTMLVideoElement): void {
+  const frameWidth = frame.clientWidth
+  const frameHeight = frame.clientHeight
+  const videoWidth = video.videoWidth
+  const videoHeight = video.videoHeight
+  if (!frameWidth || !frameHeight || !videoWidth || !videoHeight) {
+    return
+  }
+  const scale = Math.max(frameWidth / videoWidth, frameHeight / videoHeight)
+  video.style.width = `${Math.ceil(videoWidth * scale)}px`
+  video.style.height = `${Math.ceil(videoHeight * scale)}px`
+}
+
+/**
+ * The player stays mounted so play() can run inside the tap, but it has no
+ * src until then. iOS/Android still paint the native play bar over a <video src>
+ * even when controls are off and the element is display:none.
+ */
+const ShareVideoElement = memo(function ShareVideoElement({
+  videoRef,
+}: {
+  videoRef: MutableRefObject<HTMLVideoElement | null>
+}) {
+  return (
+    <video
+      ref={videoRef}
+      className="share-video-player"
+      playsInline
+      preload="none"
+      controls={false}
+      disablePictureInPicture
+      controlsList="nofullscreen nodownload noremoteplayback"
+      aria-hidden="true"
+    />
+  )
+})
+
 function ShareVideo({ src, poster }: { src: string; poster?: string }) {
   const copy = useShareCopy()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const resumeAtRef = useRef(0)
+  const startingRef = useRef(false)
+  const parkingRef = useRef(false)
   const [isPlaying, setIsPlaying] = useState(false)
 
-  const setPlaying = (playing: boolean) => {
-    rootRef.current?.classList.toggle('is-playing', playing)
-    setIsPlaying(playing)
-  }
+  const showPlaying = useCallback(() => {
+    startingRef.current = false
+    const frame = rootRef.current
+    const video = videoRef.current
+    if (frame && video) {
+      layoutShareVideo(frame, video)
+    }
+    frame?.classList.add('is-playing')
+    setIsPlaying(true)
+  }, [])
+
+  const parkVideo = useCallback((ended: boolean) => {
+    if (startingRef.current || parkingRef.current) {
+      return
+    }
+    const video = videoRef.current
+    const frame = rootRef.current
+    if (!video) {
+      return
+    }
+    const hasSrc = Boolean(video.getAttribute('src'))
+    if (!hasSrc && !frame?.classList.contains('is-playing')) {
+      return
+    }
+    parkingRef.current = true
+    if (hasSrc) {
+      if (ended || video.ended) {
+        resumeAtRef.current = 0
+      } else if (video.currentTime > 0) {
+        resumeAtRef.current = video.currentTime
+      }
+      video.pause()
+      video.removeAttribute('src')
+      video.load()
+    }
+    frame?.classList.remove('is-playing')
+    setIsPlaying(false)
+    parkingRef.current = false
+  }, [])
+
+  useEffect(() => {
+    const video = videoRef.current
+    const frame = rootRef.current
+    if (!video || !frame) {
+      return
+    }
+    const onPlaying = () => showPlaying()
+    const onPause = () => parkVideo(false)
+    const onEnded = () => parkVideo(true)
+    const onMetadata = () => {
+      if (frame.classList.contains('is-playing')) {
+        layoutShareVideo(frame, video)
+      }
+    }
+    video.addEventListener('playing', onPlaying)
+    video.addEventListener('pause', onPause)
+    video.addEventListener('ended', onEnded)
+    video.addEventListener('loadedmetadata', onMetadata)
+    const observer = new ResizeObserver(() => {
+      if (frame.classList.contains('is-playing')) {
+        layoutShareVideo(frame, video)
+      }
+    })
+    observer.observe(frame)
+    return () => {
+      video.removeEventListener('playing', onPlaying)
+      video.removeEventListener('pause', onPause)
+      video.removeEventListener('ended', onEnded)
+      video.removeEventListener('loadedmetadata', onMetadata)
+      observer.disconnect()
+    }
+  }, [parkVideo, showPlaying])
 
   const togglePlayback = () => {
     const video = videoRef.current
     if (!video) {
       return
     }
-    if (video.paused) {
+    if (!video.getAttribute('src') || video.paused) {
+      startingRef.current = true
       pauseOtherShareVideos(video)
-      // Reveal before play(). iOS will not start a display:none video, and
-      // play() has to run inside this tap or Safari blocks it.
-      setPlaying(true)
-      void video.offsetWidth
-      void video.play().catch(() => setPlaying(false))
-    } else {
-      video.pause()
+      if (!video.getAttribute('src')) {
+        const resumeAt = resumeAtRef.current
+        video.src = src
+        if (resumeAt > 0) {
+          video.addEventListener(
+            'loadedmetadata',
+            () => {
+              if (!Number.isFinite(video.duration) || resumeAt < video.duration) {
+                video.currentTime = resumeAt
+              }
+              const frame = rootRef.current
+              if (frame) {
+                layoutShareVideo(frame, video)
+              }
+            },
+            { once: true },
+          )
+        }
+      }
+      // Stay parked (no is-playing) until frames exist, so the native play
+      // glyph never has a visible <video> to draw on. play() still has to
+      // run in this tap.
+      void video.play().then(showPlaying).catch(() => {
+        startingRef.current = false
+        parkVideo(false)
+      })
+      return
     }
+    parkVideo(false)
   }
 
   return (
@@ -407,27 +539,12 @@ function ShareVideo({ src, poster }: { src: string; poster?: string }) {
         }
       }}
     >
-      {/* Keep <video> out of view until play. iOS Safari paints a white native
-          play bar across a visible <video> when object-fit is cover, and
-          ::-webkit-media-controls { display:none } does not remove it. */}
-      <video
-        ref={videoRef}
-        className="share-video-player"
-        src={src}
-        playsInline
-        preload="none"
-        controls={false}
-        disablePictureInPicture
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
-      />
-      {!isPlaying && poster ? (
+      <ShareVideoElement videoRef={videoRef} />
+      {poster ? (
         <img className="share-video-still" src={poster} alt="" />
-      ) : null}
-      {!isPlaying && !poster ? (
+      ) : (
         <span className="share-video-still share-video-still-empty" />
-      ) : null}
+      )}
       <FigmaIcon
         name={isPlaying ? 'ic_s_pause_32' : 'ic_s_play_32'}
         className="share-video-badge"

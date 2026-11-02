@@ -553,18 +553,24 @@
 
 .share-video {
   position: relative;
+  overflow: hidden;
+  background: #e9ecef;
+  line-height: 0;
 }
 
 .share-video-badge {
   position: absolute;
   left: 12px;
   bottom: 12px;
+  z-index: 2;
   width: 32px;
   height: 32px;
   pointer-events: none;
 }
 
 .share-video-still {
+  position: relative;
+  z-index: 1;
   width: 100%;
   object-fit: cover;
   display: block;
@@ -579,14 +585,34 @@
   min-height: 220px;
 }
 
-/* Idle: remove the video from the render tree. A collapsed video can still
-   paint iOS's native play bar across the poster. */
-.share-video:not(.is-playing) .share-video-player {
-  display: none;
+/* Crop with a sized box, not object-fit: cover. Cover is what drops the
+   native play bar across the middle of the frame on iOS and Android. */
+.share-video-player,
+.media-gallery .share-video-player,
+.surface-time-gallery .share-video-player {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  transform: translate(-50%, -50%);
+  object-fit: fill;
+  opacity: 0;
+  pointer-events: none;
+  background: #000;
 }
 
-/* Native controls sit mid-frame when the video uses object-fit: cover.
-   iOS ignores the enclosure/panel hide, so also zero the start-playback button. */
+.share-video.is-playing .share-video-player {
+  opacity: 1;
+}
+
+.share-video.is-playing .share-video-still {
+  visibility: hidden;
+}
+
 .share-video video::-webkit-media-controls,
 .share-video video::-webkit-media-controls-enclosure,
 .share-video video::-webkit-media-controls-panel,
