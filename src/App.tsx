@@ -357,9 +357,12 @@ function SurfaceTimeDetailScreen({
   )
 }
 
+const shareVideoStopRequested = new WeakSet<HTMLVideoElement>()
+
 function pauseOtherShareVideos(current: HTMLVideoElement): void {
   document.querySelectorAll<HTMLVideoElement>('.share-video video').forEach((video) => {
     if (video !== current && !video.paused) {
+      shareVideoStopRequested.add(video)
       video.pause()
     }
   })
@@ -446,6 +449,8 @@ function ShareVideo({ src, poster }: { src: string; poster?: string }) {
       video.pause()
       video.removeAttribute('src')
       video.load()
+      video.style.width = ''
+      video.style.height = ''
     }
     frame?.classList.remove('is-playing')
     setIsPlaying(false)
@@ -459,7 +464,13 @@ function ShareVideo({ src, poster }: { src: string; poster?: string }) {
       return
     }
     const onPlaying = () => showPlaying()
-    const onPause = () => parkVideo(false)
+    const onPause = () => {
+      if (!shareVideoStopRequested.has(video)) {
+        return
+      }
+      shareVideoStopRequested.delete(video)
+      parkVideo(false)
+    }
     const onEnded = () => parkVideo(true)
     const onMetadata = () => {
       if (frame.classList.contains('is-playing')) {
@@ -512,10 +523,10 @@ function ShareVideo({ src, poster }: { src: string; poster?: string }) {
           )
         }
       }
-      // Stay parked (no is-playing) until frames exist, so the native play
-      // glyph never has a visible <video> to draw on. play() still has to
-      // run in this tap.
-      void video.play().then(showPlaying).catch(() => {
+      // Reveal on the playing event only. play() has to run in this tap,
+      // but showing the element before the first frame brings the native
+      // play bar back over the poster.
+      void video.play().catch(() => {
         startingRef.current = false
         parkVideo(false)
       })
